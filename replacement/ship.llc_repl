@@ -20,7 +20,7 @@ class SAMPLER_class
             used;
 
     uint64_t tag, cl_addr, ip;
-    
+
     uint32_t lru;
 
     SAMPLER_class() {
@@ -77,15 +77,15 @@ void CACHE::llc_initialize_replacement()
     int do_again = 0;
     for (int i=0; i<SAMPLER_SET; i++)
     {
-        do 
+        do
         {
             do_again = 0;
             rand_seed = rand_seed * 1103515245 + 12345;
             rand_sets[i] = ((unsigned) ((rand_seed/65536) % max_rand)) % my_set;
             printf("Assign rand_sets[%d]: %u  LLC: %u\n", i, rand_sets[i], my_set);
-            for (int j=0; j<i; j++) 
+            for (int j=0; j<i; j++)
             {
-                if (rand_sets[i] == rand_sets[j]) 
+                if (rand_sets[i] == rand_sets[j])
                 {
                     do_again = 1;
                     break;
@@ -110,7 +110,7 @@ uint32_t is_it_sampled(uint32_t set)
 void update_sampler(uint32_t cpu, uint32_t s_idx, uint64_t address, uint64_t ip, uint8_t type)
 {
     SAMPLER_class *s_set = sampler[s_idx];
-    uint64_t tag = address / (64*LLC_SET); 
+    uint64_t tag = address / (64*LLC_SET);
     int match = -1;
 
     // check hit
@@ -124,12 +124,12 @@ void update_sampler(uint32_t cpu, uint32_t s_idx, uint64_t address, uint64_t ip,
 
             /*
             if (draw_transition)
-                printf("cycle: %lu SHCT: %d ip: 0x%llX SAMPLER_HIT cl_addr: 0x%llX page: 0x%llX block: %ld set: %d\n", 
+                printf("cycle: %lu SHCT: %d ip: 0x%llX SAMPLER_HIT cl_addr: 0x%llX page: 0x%llX block: %ld set: %d\n",
                 ooo_cpu[cpu].current_cycle, SHCT[cpu][SHCT_idx].dead, s_set[match].ip, address>>6, address>>12, (address>>6) & 0x3F, s_idx);
             */
 
             //s_set[match].ip = ip; // SHIP does not update ip on sampler hit
-            s_set[match].type = type; 
+            s_set[match].type = type;
             s_set[match].used = 1;
             //D(printf("sampler hit  cpu: %d  set: %d  way: %d  tag: %x  ip: %lx  type: %d  lru: %d\n",
             //            cpu, rand_sets[s_idx], match, tag, ip, type, s_set[match].lru));
@@ -173,7 +173,7 @@ void update_sampler(uint32_t cpu, uint32_t s_idx, uint64_t address, uint64_t ip,
 
                     /*
                     if (draw_transition)
-                        printf("cycle: %lu SHCT: %d ip: 0x%llX SAMPLER_MISS cl_addr: 0x%llX page: 0x%llX block: %ld set: %d\n", 
+                        printf("cycle: %lu SHCT: %d ip: 0x%llX SAMPLER_MISS cl_addr: 0x%llX page: 0x%llX block: %ld set: %d\n",
                         ooo_cpu[cpu].current_cycle, SHCT[cpu][SHCT_idx].dead, s_set[match].ip, address>>6, address>>12, (address>>6) & 0x3F, s_idx);
                     */
                 }
@@ -244,7 +244,7 @@ void CACHE::llc_update_replacement_state(uint32_t cpu, uint32_t set, uint32_t wa
 
     //cout << "CPU: " << cpu << "  LLC " << setw(9) << TYPE_NAME << " set: " << setw(5) << set << " way: " << setw(2) << way;
     //cout << hex << " paddr: " << setw(12) << full_addr << " ip: " << setw(8) << ip << " victim_addr: " << victim_addr << dec << endl;
-    
+
     // handle writeback access
     if (type == WRITEBACK) {
         if (hit)
@@ -281,3 +281,5 @@ void CACHE::llc_replacement_final_stats()
 {
 
 }
+
+/* vim: set filetype=cpp: */
