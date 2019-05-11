@@ -1,0 +1,5 @@
+configure.mk
+
+obj/
+bin/
+
