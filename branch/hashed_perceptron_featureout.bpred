@@ -52,6 +52,10 @@ sources for you to plagiarize.
 #include <math.h>
 #include <stdlib.h>
 
+#ifdef FEATUREOUT
+#include <fstream>
+#endif
+
 #include "ooo_cpu.h"
 
 // this many tables
@@ -89,6 +93,10 @@ int theta[NUM_CPUS], // initialize theta to something reasonable,
     tc[NUM_CPUS],    // initialize counter for threshold setting algorithm
     yout[NUM_CPUS];  // perceptron sum
 
+#ifdef FEATUREOUT
+ofstream featureout_file;
+#endif
+
 void O3_CPU::initialize_branch_predictor () {
     // zero out the weights tables
     memset (tables, 0, sizeof (tables));
@@ -98,6 +106,10 @@ void O3_CPU::initialize_branch_predictor () {
 
     // make a reasonable theta
     for (int i=0; i<NUM_CPUS; i++) theta[i] = 10;
+
+#ifdef FEATUREOUT
+    featureout_file = ofstream("bpred_features.csv");
+#endif
 }
 
 uint8_t O3_CPU::predict_branch(uint64_t pc) {
@@ -122,16 +134,31 @@ uint8_t O3_CPU::predict_branch(uint64_t pc) {
 
         // XOR up to the next-to-the-last word
         int j;
-        for (j=0; j<most_words; j++) x ^= ghist_words[cpu][j];
+        for (j=0; j<most_words; j++)
+        {
+            x ^= ghist_words[cpu][j];
+#ifdef FEATUREOUT
+            featureout_file << ghist_words[cpu][j] << ",";
+#endif
+        }
 
         // XOR in the last word
         x ^= ghist_words[cpu][j] & ((1<<last_word)-1);
+#ifdef FEATUREOUT
+        featureout_file << ghist_words[cpu][j] << ",";
+#endif
 
         // XOR in the PC to spread accesses around (like gshare)
         x ^= pc;
+#ifdef FEATUREOUT
+        featureout_file << pc << ",";
+#endif
 
         // stay within the table size
         x &= TABLE_SIZE-1;
+#ifdef FEATUREOUT
+        featureout_file << x << std::endl;
+#endif
 
         // remember this index for update
         indices[cpu][i] = x;
@@ -139,6 +166,10 @@ uint8_t O3_CPU::predict_branch(uint64_t pc) {
         // add the selected weight to the perceptron sum
         yout[cpu] += tables[cpu][i][x];
     }
+
+#ifdef FEATUREOUT
+    featureout_file.flush();
+#endif
     return yout[cpu] >= 1;
 }
 
