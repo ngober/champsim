@@ -1,0 +1,22 @@
+## Setting some basic information
+executable_name=champsim-ship-featureout
+num_cores=1
+
+## Selecting a prefetcher
+#l1prefetcher=prefetcher/next_line.l1d_pref
+#l2prefetcher=prefetcher/next_line.l2c_pref
+#llprefetcher=prefetcher/next_line.llc_pref
+
+## Selecting a LLC replacement policy
+llreplacement=replacement/ship_featureout.llc_repl
+
+## Various Make options can be set in this file as well
+CC=gcc
+CXX=g++
+CFLAGS=-O2
+CXXFLAGS=-O2
+CPPFLAGS=-DFEATUREOUT
+#LDFLAGS=-L/usr/lib
+#LDLIBS=-lm
+
+
