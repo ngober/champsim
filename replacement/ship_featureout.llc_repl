@@ -104,7 +104,7 @@ void CACHE::llc_initialize_replacement()
     }
 
 #ifdef FEATUREOUT
-    feature_file = ofstream("repl_features.csv");
+    feature_file.open("ship_featureout.csv");
 #endif
 }
 
