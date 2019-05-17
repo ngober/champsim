@@ -14,14 +14,14 @@ PREFETCH_FILTER FILTER;
 GLOBAL_REGISTER GHR;
 PERCEPTRON PERC;
 
-#ifdef SPP_PRINT_TRACE
+#ifdef FEATUREOUT
 ofstream tracefile;
 #endif
 
 void CACHE::l2c_prefetcher_initialize()
 {
-#ifdef SPP_PRINT_TRACE
-    tracefile.open("trace.csv");
+#ifdef FEATUREOUT
+    tracefile.open("spp_featureout.csv");
 #endif
 }
 
@@ -234,7 +234,8 @@ void CACHE::l2c_prefetcher_final_stats()
     myfile.close();
 #endif
 
-#ifdef SPP_PRINT_TRACE
+#ifdef FEATUREOUT
+    tracefile.flush();
     tracefile.close();
 #endif
 
@@ -831,7 +832,7 @@ int32_t PERCEPTRON::perc_predict(uint64_t base_addr, uint64_t ip, uint64_t ip_1,
     // Get the indexes in perc_set[]
     get_perc_index(base_addr, ip, ip_1, ip_2, ip_3, cur_delta, last_sig, curr_sig, confidence, depth, perc_set);
 
-#ifdef SPP_PRINT_TRACE
+#ifdef FEATUREOUT
     tracefile << base_addr << "," << ip << "," << ip_1 << "," << ip_2 << "," << ip_3 << "," << cur_delta << "," << last_sig << "," << curr_sig << "," << confidence << "," << depth;
     for (int i = 0; i < PERC_FEATURES; i++)
     {
