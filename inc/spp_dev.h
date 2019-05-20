@@ -11,9 +11,6 @@ using namespace std;
 #define GHR_ON
 #define SPP_SANITY_CHECK
 
-//#define SPP_DEBUG_PRINT
-#define SPP_PERC_WGHT
-
 // Signature table parameters
 #define ST_SET 1
 #define ST_WAY 256
