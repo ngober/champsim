@@ -108,7 +108,7 @@ void O3_CPU::initialize_branch_predictor () {
     for (int i=0; i<NUM_CPUS; i++) theta[i] = 10;
 
 #ifdef FEATUREOUT
-    featureout_file = ofstream("bpred_features.csv");
+    featureout_file.open("bpred_featureout.csv");
 #endif
 }
 
@@ -137,15 +137,15 @@ uint8_t O3_CPU::predict_branch(uint64_t pc) {
         for (j=0; j<most_words; j++)
         {
             x ^= ghist_words[cpu][j];
-#ifdef FEATUREOUT
-            featureout_file << ghist_words[cpu][j] << ",";
-#endif
         }
 
         // XOR in the last word
         x ^= ghist_words[cpu][j] & ((1<<last_word)-1);
 #ifdef FEATUREOUT
-        featureout_file << ghist_words[cpu][j] << ",";
+        for (j = 0; j<NGHIST_WORDS; j++)
+        {
+            featureout_file << ghist_words[cpu][j] << ",";
+        }
 #endif
 
         // XOR in the PC to spread accesses around (like gshare)
