@@ -8,6 +8,10 @@
 #include "cache.h"
 #include "spp_dev.h"
 
+#ifdef FEATUREOUT
+#include <math.h>
+#endif
+
 SIGNATURE_TABLE ST;
 PATTERN_TABLE   PT;
 PREFETCH_FILTER FILTER;
@@ -833,7 +837,8 @@ int32_t PERCEPTRON::perc_predict(uint64_t base_addr, uint64_t ip, uint64_t ip_1,
     get_perc_index(base_addr, ip, ip_1, ip_2, ip_3, cur_delta, last_sig, curr_sig, confidence, depth, perc_set);
 
 #ifdef FEATUREOUT
-    tracefile << base_addr << "," << ip << "," << ip_1 << "," << ip_2 << "," << ip_3 << "," << cur_delta << "," << last_sig << "," << curr_sig << "," << confidence << "," << depth;
+    cur_delta_signmag = std::abs(cur_delta) | (cur_delta < 0 ? 0x40 : 0);
+    tracefile << base_addr << "," << ip << "," << ip_1 << "," << ip_2 << "," << ip_3 << "," << cur_delta "," << cur_delta_signmag << "," << last_sig << "," << curr_sig << "," << confidence << "," << depth;
     for (int i = 0; i < PERC_FEATURES; i++)
     {
         tracefile << "," << perc_set[i];
