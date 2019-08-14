@@ -1,3 +1,4 @@
+/* vim: set filetype=cpp: */
 #include "cache.h"
 #include "spp_dev.h"
 
@@ -6,7 +7,7 @@ PATTERN_TABLE   PT;
 PREFETCH_FILTER FILTER;
 GLOBAL_REGISTER GHR;
 
-void CACHE::l2c_prefetcher_initialize() 
+void CACHE::l2c_prefetcher_initialize()
 {
 
 }
@@ -29,7 +30,7 @@ uint32_t CACHE::l2c_prefetcher_operate(uint64_t addr, uint64_t ip, uint8_t cache
     }
     confidence_q[0] = 100;
     GHR.global_accuracy = GHR.pf_issued ? ((100 * GHR.pf_useful) / GHR.pf_issued)  : 0;
-    
+
     SPP_DP (
         cout << endl << "[ChampSim] " << __func__ << " addr: " << hex << addr << " cache_line: " << (addr >> LOG2_BLOCK_SIZE);
         cout << " page: " << page << " page_offset: " << dec << page_offset << endl;
@@ -37,11 +38,11 @@ uint32_t CACHE::l2c_prefetcher_operate(uint64_t addr, uint64_t ip, uint8_t cache
 
     // Stage 1: Read and update a sig stored in ST
     // last_sig and delta are used to update (sig, delta) correlation in PT
-    // curr_sig is used to read prefetch candidates in PT 
+    // curr_sig is used to read prefetch candidates in PT
     ST.read_and_update_sig(page, page_offset, last_sig, curr_sig, delta);
 
-    // Also check the prefetch filter in parallel to update global accuracy counters 
-    FILTER.check(addr, L2C_DEMAND); 
+    // Also check the prefetch filter in parallel to update global accuracy counters
+    FILTER.check(addr, L2C_DEMAND);
 
     // Stage 2: Update delta patterns stored in PT
     if (last_sig) PT.update_pattern(last_sig, delta);
@@ -49,7 +50,7 @@ uint32_t CACHE::l2c_prefetcher_operate(uint64_t addr, uint64_t ip, uint8_t cache
     // Stage 3: Start prefetching
     uint64_t base_addr = addr;
     uint32_t lookahead_conf = 100,
-             pf_q_head = 0, 
+             pf_q_head = 0,
              pf_q_tail = 0;
     uint8_t  do_lookahead = 0;
 
@@ -87,7 +88,7 @@ uint32_t CACHE::l2c_prefetcher_operate(uint64_t addr, uint64_t ip, uint8_t cache
                 } else { // Prefetch request is crossing the physical page boundary
 #ifdef GHR_ON
                     // Store this prefetch request in GHR to bootstrap SPP learning when we see a ST miss (i.e., accessing a new page)
-                    GHR.update_entry(curr_sig, confidence_q[i], (pf_addr >> LOG2_BLOCK_SIZE) & 0x3F, delta_q[i]); 
+                    GHR.update_entry(curr_sig, confidence_q[i], (pf_addr >> LOG2_BLOCK_SIZE) & 0x3F, delta_q[i]);
 #endif
                 }
 
@@ -386,10 +387,10 @@ bool PREFETCH_FILTER::check(uint64_t check_addr, FILTER_REQUEST filter_request)
 
     switch (filter_request) {
         case SPP_L2C_PREFETCH:
-            if ((valid[quotient] || useful[quotient]) && remainder_tag[quotient] == remainder) { 
+            if ((valid[quotient] || useful[quotient]) && remainder_tag[quotient] == remainder) {
                 SPP_DP (
                     cout << "[FILTER] " << __func__ << " line is already in the filter check_addr: " << hex << check_addr << " cache_line: " << cache_line << dec;
-                    cout << " quotient: " << quotient << " valid: " << valid[quotient] << " useful: " << useful[quotient] << endl; 
+                    cout << " quotient: " << quotient << " valid: " << valid[quotient] << " useful: " << useful[quotient] << endl;
                 );
 
                 return false; // False return indicates "Do not prefetch"
@@ -400,21 +401,21 @@ bool PREFETCH_FILTER::check(uint64_t check_addr, FILTER_REQUEST filter_request)
 
                 SPP_DP (
                     cout << "[FILTER] " << __func__ << " set valid for check_addr: " << hex << check_addr << " cache_line: " << cache_line << dec;
-                    cout << " quotient: " << quotient << " remainder_tag: " << remainder_tag[quotient] << " valid: " << valid[quotient] << " useful: " << useful[quotient] << endl; 
+                    cout << " quotient: " << quotient << " remainder_tag: " << remainder_tag[quotient] << " valid: " << valid[quotient] << " useful: " << useful[quotient] << endl;
                 );
             }
             break;
 
         case SPP_LLC_PREFETCH:
-            if ((valid[quotient] || useful[quotient]) && remainder_tag[quotient] == remainder) { 
+            if ((valid[quotient] || useful[quotient]) && remainder_tag[quotient] == remainder) {
                 SPP_DP (
                     cout << "[FILTER] " << __func__ << " line is already in the filter check_addr: " << hex << check_addr << " cache_line: " << cache_line << dec;
-                    cout << " quotient: " << quotient << " valid: " << valid[quotient] << " useful: " << useful[quotient] << endl; 
+                    cout << " quotient: " << quotient << " valid: " << valid[quotient] << " useful: " << useful[quotient] << endl;
                 );
 
                 return false; // False return indicates "Do not prefetch"
             } else {
-                // NOTE: SPP_LLC_PREFETCH has relatively low confidence (FILL_THRESHOLD <= SPP_LLC_PREFETCH < PF_THRESHOLD) 
+                // NOTE: SPP_LLC_PREFETCH has relatively low confidence (FILL_THRESHOLD <= SPP_LLC_PREFETCH < PF_THRESHOLD)
                 // Therefore, it is safe to prefetch this cache line in the large LLC and save precious L2C capacity
                 // If this prefetch request becomes more confident and SPP eventually issues SPP_L2C_PREFETCH,
                 // we can get this cache line immediately from the LLC (not from DRAM)
@@ -425,7 +426,7 @@ bool PREFETCH_FILTER::check(uint64_t check_addr, FILTER_REQUEST filter_request)
 
                 SPP_DP (
                     cout << "[FILTER] " << __func__ << " don't set valid for check_addr: " << hex << check_addr << " cache_line: " << cache_line << dec;
-                    cout << " quotient: " << quotient << " valid: " << valid[quotient] << " useful: " << useful[quotient] << endl; 
+                    cout << " quotient: " << quotient << " valid: " << valid[quotient] << " useful: " << useful[quotient] << endl;
                 );
             }
             break;
@@ -438,7 +439,7 @@ bool PREFETCH_FILTER::check(uint64_t check_addr, FILTER_REQUEST filter_request)
                 SPP_DP (
                     cout << "[FILTER] " << __func__ << " set useful for check_addr: " << hex << check_addr << " cache_line: " << cache_line << dec;
                     cout << " quotient: " << quotient << " valid: " << valid[quotient] << " useful: " << useful[quotient];
-                    cout << " GHR.pf_issued: " << GHR.pf_issued << " GHR.pf_useful: " << GHR.pf_useful << endl; 
+                    cout << " GHR.pf_issued: " << GHR.pf_issued << " GHR.pf_useful: " << GHR.pf_useful << endl;
                 );
             }
             break;
@@ -462,7 +463,7 @@ bool PREFETCH_FILTER::check(uint64_t check_addr, FILTER_REQUEST filter_request)
     return true;
 }
 
-void GLOBAL_REGISTER::update_entry(uint32_t pf_sig, uint32_t pf_confidence, uint32_t pf_offset, int pf_delta) 
+void GLOBAL_REGISTER::update_entry(uint32_t pf_sig, uint32_t pf_confidence, uint32_t pf_offset, int pf_delta)
 {
     // NOTE: GHR implementation is slightly different from the original paper
     // Instead of matching (last_offset + delta), GHR simply stores and matches the pf_offset
