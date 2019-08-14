@@ -4,7 +4,7 @@ num_cores=1
 
 ## Selecting a prefetcher
 #l1prefetcher=prefetcher/next_line.l1d_pref
-l2prefetcher=prefetcher/spp_dev.l2c_pref
+l2prefetcher=prefetcher/spp_dev_feature_subset.l2c_pref
 #llprefetcher=prefetcher/next_line.llc_pref
 
 ## Selecting a LLC replacement policy
