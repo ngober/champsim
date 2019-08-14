@@ -43,7 +43,8 @@
 
 // Perceptron paramaters
 #define PERC_ENTRIES (1 << 12) //Upto 12-bit addressing in hashed perceptron
-#define PERC_FEATURES 5 //Keep increasing based on new features
+#define PERC_FEATURES_IN  9
+#define PERC_FEATURES_OUT 5 //Keep increasing based on new features
 #define PERC_COUNTER_BITS 5
 #define PERC_COUNTER_MIN -1*(1 << (PERC_COUNTER_BITS - 1))
 #define PERC_COUNTER_MAX (1 << (PERC_COUNTER_BITS - 1)) - 1
@@ -199,19 +200,25 @@ class PREFETCH_FILTER {
 
 class PERCEPTRON {
     public:
-        // Perc Weights
-        int32_t perc_weights[PERC_ENTRIES][PERC_FEATURES];
+        // Crossbar indices
+        int32_t crossbar_idx[PERC_FEATURES_OUT];
 
+        // Perc Weights
+        int32_t perc_weights[PERC_ENTRIES][PERC_FEATURES_OUT];
+
+#ifdef SPP_PERC_WGHT
         // Only for dumping csv
-        bool    perc_touched[PERC_ENTRIES][PERC_FEATURES];
+        bool    perc_touched[PERC_ENTRIES][PERC_FEATURES_OUT];
+#endif
 
         // CONST depths for different features
-        int32_t PERC_DEPTH[PERC_FEATURES];
+        int32_t PERC_DEPTH[PERC_FEATURES_OUT];
 
         PERCEPTRON() {
             std::cout << "\nInitialize PERCEPTRON" << std::endl;
             std::cout << "PERC_ENTRIES: " << PERC_ENTRIES << std::endl;
-            std::cout << "PERC_FEATURES: " << PERC_FEATURES << std::endl;
+            std::cout << "PERC_FEATURES_IN: " << PERC_FEATURES_IN << std::endl;
+            std::cout << "PERC_FEATURES_OUT: " << PERC_FEATURES_OUT << std::endl;
 
             PERC_DEPTH[0] = (1 << PERC_ELEM0_WIDTH);   //base_addr;
             PERC_DEPTH[1] = (1 << PERC_ELEM1_WIDTH);   //cache_line;
@@ -220,15 +227,17 @@ class PERCEPTRON {
             PERC_DEPTH[4] = (1 << PERC_ELEM4_WIDTH);   //curr_sig ^ sig_delta;
 
             for (int i = 0; i < PERC_ENTRIES; i++) {
-                for (int j = 0;j < PERC_FEATURES; j++) {
+                for (int j = 0;j < PERC_FEATURES_OUT; j++) {
                     perc_weights[i][j] = 0;
+#ifdef SPP_PERC_WGHT
                     perc_touched[i][j] = 0;
+#endif
                 }
             }
         }
 
-        void	 perc_update(uint64_t check_addr, uint64_t ip, uint64_t ip_1, uint64_t ip_2, uint64_t ip_3, int32_t cur_delta, uint32_t last_sig, uint32_t curr_sig, uint32_t confidence, uint32_t depth, bool direction, int32_t perc_sum);
-        int32_t	perc_predict(uint64_t check_addr, uint64_t ip, uint64_t ip_1, uint64_t ip_2, uint64_t ip_3, int32_t cur_delta, uint32_t last_sig, uint32_t curr_sig, uint32_t confidence, uint32_t depth);
+        void    perc_update(uint64_t check_addr, uint64_t ip, uint64_t ip_1, uint64_t ip_2, uint64_t ip_3, int32_t cur_delta, uint32_t last_sig, uint32_t curr_sig, uint32_t confidence, uint32_t depth, bool direction, int32_t perc_sum);
+        int32_t perc_predict(uint64_t check_addr, uint64_t ip, uint64_t ip_1, uint64_t ip_2, uint64_t ip_3, int32_t cur_delta, uint32_t last_sig, uint32_t curr_sig, uint32_t confidence, uint32_t depth);
 };
 
 
