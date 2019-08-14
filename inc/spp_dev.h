@@ -2,17 +2,7 @@
 #define SPP_H
 
 // SPP functional knobs
-#define LOOKAHEAD_ON
-#define FILTER_ON
-#define GHR_ON
 #define SPP_SANITY_CHECK
-
-//#define SPP_DEBUG_PRINT
-#ifdef SPP_DEBUG_PRINT
-#define SPP_DP(x) x
-#else
-#define SPP_DP(x)
-#endif
 
 // Signature table parameters
 #define ST_SET 1
