@@ -42,13 +42,36 @@
 #define MAX_GHR_ENTRY 8
 
 // Perceptron paramaters
-#define PERC_ENTRIES 4096 //Upto 12-bit addressing in hashed perceptron
-#define PERC_FEATURES 9 //Keep increasing based on new features
-#define PERC_COUNTER_MAX 15 //-16 to +15: 5 bits counter
+#define PERC_ENTRIES (1 << 12) //Upto 12-bit addressing in hashed perceptron
+#define PERC_FEATURES 5 //Keep increasing based on new features
+#define PERC_COUNTER_BITS 5
+#define PERC_COUNTER_MIN -1*(1 << (PERC_COUNTER_BITS - 1))
+#define PERC_COUNTER_MAX (1 << (PERC_COUNTER_BITS - 1)) - 1
 #define PERC_THRESHOLD_HI  -5
 #define PERC_THRESHOLD_LO  -15
 #define POS_UPDT_THRESHOLD  90
 #define NEG_UPDT_THRESHOLD -80
+
+// Perceptron element widths (ifndef guards to let me redefine at compile time)
+#ifndef PERC_ELEM0_WIDTH
+#define PERC_ELEM0_WIDTH 12
+#endif
+
+#ifndef PERC_ELEM1_WIDTH
+#define PERC_ELEM1_WIDTH 12
+#endif
+
+#ifndef PERC_ELEM2_WIDTH
+#define PERC_ELEM2_WIDTH 11
+#endif
+
+#ifndef PERC_ELEM3_WIDTH
+#define PERC_ELEM3_WIDTH 10
+#endif
+
+#ifndef PERC_ELEM4_WIDTH
+#define PERC_ELEM4_WIDTH 7
+#endif
 
 enum FILTER_REQUEST {SPP_L2C_PREFETCH, SPP_LLC_PREFETCH, L2C_DEMAND, L2C_EVICT, SPP_PERC_REJECT}; // Request type for prefetch filter
 
@@ -190,15 +213,11 @@ class PERCEPTRON {
             std::cout << "PERC_ENTRIES: " << PERC_ENTRIES << std::endl;
             std::cout << "PERC_FEATURES: " << PERC_FEATURES << std::endl;
 
-            PERC_DEPTH[0] = 2048;   //base_addr;
-            PERC_DEPTH[1] = 4096;   //cache_line;
-            PERC_DEPTH[2] = 4096;   //page_addr;
-            PERC_DEPTH[3] = 4096;   //confidence ^ page_addr;
-            PERC_DEPTH[4] = 1024;   //curr_sig ^ sig_delta;
-            PERC_DEPTH[5] = 4096;   //ip_1 ^ ip_2 ^ ip_3;
-            PERC_DEPTH[6] = 1024;   //ip ^ depth;
-            PERC_DEPTH[7] = 2048;   //ip ^ sig_delta;
-            PERC_DEPTH[8] = 128;    //confidence;
+            PERC_DEPTH[0] = (1 << PERC_ELEM0_WIDTH);   //base_addr;
+            PERC_DEPTH[1] = (1 << PERC_ELEM1_WIDTH);   //cache_line;
+            PERC_DEPTH[2] = (1 << PERC_ELEM2_WIDTH);   //page_addr;
+            PERC_DEPTH[3] = (1 << PERC_ELEM3_WIDTH);   //confidence ^ page_addr;
+            PERC_DEPTH[4] = (1 << PERC_ELEM4_WIDTH);   //curr_sig ^ sig_delta;
 
             for (int i = 0; i < PERC_ENTRIES; i++) {
                 for (int j = 0;j < PERC_FEATURES; j++) {

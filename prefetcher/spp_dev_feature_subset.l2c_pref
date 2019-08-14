@@ -885,7 +885,7 @@ void    PERCEPTRON::perc_update(uint64_t base_addr, uint64_t ip, uint64_t ip_1, 
         for (int i = 0; i < PERC_FEATURES; i++) {
             if (sum >= PERC_THRESHOLD_HI) {
                 // Prediction was to prefectch -- so decrement counters
-                if (perc_weights[perc_set[i]][i] > -1*(PERC_COUNTER_MAX+1) )
+                if (perc_weights[perc_set[i]][i] > PERC_COUNTER_MIN )
                     perc_weights[perc_set[i]][i]--;
             }
             if (sum < PERC_THRESHOLD_HI) {
