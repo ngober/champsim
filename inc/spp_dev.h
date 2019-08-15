@@ -46,8 +46,8 @@
 #define PERC_FEATURES_IN  9
 #define PERC_FEATURES_OUT 5 //Keep increasing based on new features
 #define PERC_COUNTER_BITS 5
-#define PERC_COUNTER_MIN -1*(1 << (PERC_COUNTER_BITS - 1))
-#define PERC_COUNTER_MAX (1 << (PERC_COUNTER_BITS - 1)) - 1
+#define PERC_COUNTER_MIN (-1*(1 << (PERC_COUNTER_BITS - 1)))
+#define PERC_COUNTER_MAX ((1 << (PERC_COUNTER_BITS - 1)) - 1)
 #define PERC_THRESHOLD_HI  -5
 #define PERC_THRESHOLD_LO  -15
 #define POS_UPDT_THRESHOLD  90
