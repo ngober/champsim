@@ -212,19 +212,13 @@ class PERCEPTRON {
 #endif
 
         // CONST depths for different features
-        int32_t PERC_DEPTH[PERC_FEATURES_OUT];
+        static const int32_t PERC_DEPTH[PERC_FEATURES_OUT];
 
         PERCEPTRON() {
             std::cout << "\nInitialize PERCEPTRON" << std::endl;
             std::cout << "PERC_ENTRIES: " << PERC_ENTRIES << std::endl;
             std::cout << "PERC_FEATURES_IN: " << PERC_FEATURES_IN << std::endl;
             std::cout << "PERC_FEATURES_OUT: " << PERC_FEATURES_OUT << std::endl;
-
-            PERC_DEPTH[0] = (1 << PERC_ELEM0_WIDTH);   //base_addr;
-            PERC_DEPTH[1] = (1 << PERC_ELEM1_WIDTH);   //cache_line;
-            PERC_DEPTH[2] = (1 << PERC_ELEM2_WIDTH);   //page_addr;
-            PERC_DEPTH[3] = (1 << PERC_ELEM3_WIDTH);   //confidence ^ page_addr;
-            PERC_DEPTH[4] = (1 << PERC_ELEM4_WIDTH);   //curr_sig ^ sig_delta;
 
             for (int i = 0; i < PERC_ENTRIES; i++) {
                 for (int j = 0;j < PERC_FEATURES_OUT; j++) {
@@ -240,6 +234,7 @@ class PERCEPTRON {
         int32_t perc_predict(uint64_t check_addr, uint64_t ip, uint64_t ip_1, uint64_t ip_2, uint64_t ip_3, int32_t cur_delta, uint32_t last_sig, uint32_t curr_sig, uint32_t confidence, uint32_t depth);
 };
 
+const int32_t PERCEPTRON::PERC_DEPTH[PERC_FEATURES_OUT] = { 1 << PERC_ELEM0_WIDTH, 1 << PERC_ELEM1_WIDTH, 1 << PERC_ELEM2_WIDTH, 1 << PERC_ELEM3_WIDTH, 1 << PERC_ELEM4_WIDTH};
 
 class GLOBAL_REGISTER {
     public:
