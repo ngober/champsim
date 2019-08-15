@@ -5,12 +5,9 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <math.h>
 #include "cache.h"
 #include "spp_dev.h"
-
-#ifdef FEATUREOUT
-#include <math.h>
-#endif
 
 SIGNATURE_TABLE ST;
 PATTERN_TABLE   PT;
@@ -790,6 +787,39 @@ uint32_t GLOBAL_REGISTER::check_entry(uint32_t page_offset)
     }
 
     return max_conf_way;
+}
+
+int get_perc_utility(PERCEPTRON perc)
+{
+    int sum = 0;
+    int abssum = 0;
+
+    const int A = 1;
+    const int B = 1;
+
+    for (int i = 0; i < PERC_FEATURES_OUT; i++)
+    {
+        for (int j = 0; j < perc.PERC_DEPTH[i]; i++)
+        {
+            int val = perc.perc_weights[j][i];
+            sum += val;
+            if (val > 0)
+            {
+                abssum += val;
+            }
+            else
+            {
+                abssum -= val;
+            }
+        }
+    }
+
+    if (sum < 0)
+    {
+        sum = -sum;
+    }
+
+    return A*sum + B*abssum;
 }
 
 void get_perc_index(uint64_t base_addr, uint64_t ip, uint64_t ip_1, uint64_t ip_2, uint64_t ip_3, int32_t cur_delta, uint32_t last_sig, uint32_t curr_sig, uint32_t confidence, uint32_t depth, uint64_t perc_set[PERC_FEATURES_IN])
