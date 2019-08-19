@@ -66,15 +66,15 @@
 #endif
 
 #ifndef PERC_ELEM2_WIDTH
-#define PERC_ELEM2_WIDTH 11
+#define PERC_ELEM2_WIDTH 12
 #endif
 
 #ifndef PERC_ELEM3_WIDTH
-#define PERC_ELEM3_WIDTH 10
+#define PERC_ELEM3_WIDTH 12
 #endif
 
 #ifndef PERC_ELEM4_WIDTH
-#define PERC_ELEM4_WIDTH 7
+#define PERC_ELEM4_WIDTH 12
 #endif
 
 enum FILTER_REQUEST {SPP_L2C_PREFETCH, SPP_LLC_PREFETCH, L2C_DEMAND, L2C_EVICT, SPP_PERC_REJECT}; // Request type for prefetch filter
