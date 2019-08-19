@@ -28,10 +28,13 @@
 #define HASH_BIT (QUOTIENT_BIT + REMAINDER_BIT + 1)
 #define FILTER_SET (1 << QUOTIENT_BIT)
 
+// To enable / disable negative training using reject filter
+#ifdef PPF_TRAIN_NEG
 #define QUOTIENT_BIT_REJ  10
 #define REMAINDER_BIT_REJ 8
 #define HASH_BIT_REJ (QUOTIENT_BIT_REJ + REMAINDER_BIT_REJ + 1)
 #define FILTER_SET_REJ (1 << QUOTIENT_BIT_REJ)
+#endif
 
 #define FILL_THRESHOLD 80
 #define PF_THRESHOLD 1
@@ -167,10 +170,6 @@ class PREFETCH_FILTER {
         // Tried the set-dueling idea which din't work out
         uint32_t PSEL_1;
         uint32_t PSEL_2;
-
-        // To enable / disable negative training using reject filter
-        // Set to 1 in the prefetcher file
-        bool train_neg;
 
         float hist_hits[55];
         float hist_tots[55];

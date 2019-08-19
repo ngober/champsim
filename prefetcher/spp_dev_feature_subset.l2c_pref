@@ -58,8 +58,6 @@ uint32_t CACHE::l2c_prefetcher_operate(uint64_t addr, uint64_t ip, uint8_t cache
     // curr_sig is used to read prefetch candidates in PT
     ST.read_and_update_sig(page, page_offset, last_sig, curr_sig, delta);
 
-    FILTER.train_neg = 1;
-
     // Also check the prefetch filter in parallel to update global accuracy counters
     FILTER.check(addr, 0, 0, L2C_DEMAND, 0, 0, 0, 0, 0, 0);
 
@@ -529,9 +527,11 @@ bool PREFETCH_FILTER::check(uint64_t check_addr, uint64_t base_addr, uint64_t ip
     uint64_t quotient = (hash >> REMAINDER_BIT) & ((1 << QUOTIENT_BIT) - 1),
              remainder = hash % (1 << REMAINDER_BIT);
 
+#ifdef PPF_TRAIN_NEG
     //REJECT FILTER
     uint64_t quotient_reject = (hash >> REMAINDER_BIT_REJ) & ((1 << QUOTIENT_BIT_REJ) - 1),
              remainder_reject = hash % (1 << REMAINDER_BIT_REJ);
+#endif
 
 #ifndef NDEBUG
     cout << "[FILTER] check_addr: " << hex << check_addr << " check_cache_line: " << (check_addr >> LOG2_BLOCK_SIZE);
@@ -551,28 +551,28 @@ bool PREFETCH_FILTER::check(uint64_t check_addr, uint64_t base_addr, uint64_t ip
 #endif
                 return false; // False return indicates "Do not prefetch"
             } else {
-                if (train_neg) {
-                    valid_reject[quotient_reject] = 1;
-                    remainder_tag_reject[quotient_reject] = remainder_reject;
+#ifdef PPF_TRAIN_NEG
+                valid_reject[quotient_reject] = 1;
+                remainder_tag_reject[quotient_reject] = remainder_reject;
 
-                    // Logging perc features
-                    address_reject[quotient_reject] = base_addr;
-                    pc_reject[quotient_reject] = ip;
-                    pc_1_reject[quotient_reject] = GHR.ip_1;
-                    pc_2_reject[quotient_reject] = GHR.ip_2;
-                    pc_3_reject[quotient_reject] = GHR.ip_3;
-                    delta_reject[quotient_reject] = cur_delta;
-                    perc_sum_reject[quotient_reject] = sum;
-                    last_signature_reject[quotient_reject] = last_sig;
-                    cur_signature_reject[quotient_reject] = curr_sig;
-                    confidence_reject[quotient_reject] = conf;
-                    la_depth_reject[quotient_reject] = depth;
-                }
+                // Logging perc features
+                address_reject[quotient_reject] = base_addr;
+                pc_reject[quotient_reject] = ip;
+                pc_1_reject[quotient_reject] = GHR.ip_1;
+                pc_2_reject[quotient_reject] = GHR.ip_2;
+                pc_3_reject[quotient_reject] = GHR.ip_3;
+                delta_reject[quotient_reject] = cur_delta;
+                perc_sum_reject[quotient_reject] = sum;
+                last_signature_reject[quotient_reject] = last_sig;
+                cur_signature_reject[quotient_reject] = curr_sig;
+                confidence_reject[quotient_reject] = conf;
+                la_depth_reject[quotient_reject] = depth;
 
 #ifndef NDEBUG
                 cout << "[FILTER] " << __func__ << " PF rejected by perceptron. Set valid_reject for check_addr: " << hex << check_addr << " cache_line: " << cache_line << dec;
                 cout << " quotient: " << quotient << " remainder_tag: " << remainder_tag_reject[quotient_reject] << endl;
                 cout << " More Recorded Metadata: Addr: " << hex << address_reject[quotient_reject] << dec << " PC: " << pc_reject[quotient_reject] << " Delta: " << delta_reject[quotient_reject] << " Last Signature: " << last_signature_reject[quotient_reject] << " Current Signature: " << cur_signature_reject[quotient_reject] << " Confidence: " << confidence_reject[quotient_reject] << endl;
+#endif
 #endif
             }
             break;
@@ -663,22 +663,22 @@ bool PREFETCH_FILTER::check(uint64_t check_addr, uint64_t base_addr, uint64_t ip
             }
             //If NOT Prefetched
             if (!(valid[quotient] && remainder_tag[quotient] == remainder)) {
+#ifdef PPF_TRAIN_NEG
                 // AND If Rejected by Perc
                 if (valid_reject[quotient_reject] && remainder_tag_reject[quotient_reject] == remainder_reject) {
 #ifndef NDEBUG
-                     cout << "[FILTER] " << __func__ << " not doing anything for check_addr: " << hex << check_addr << " cache_line: " << cache_line << dec;
-                     cout << " quotient: " << quotient << " valid_reject:" << valid_reject[quotient_reject];
-                     cout << " GHR.pf_issued: " << GHR.pf_issued << " GHR.pf_useful: " << GHR.pf_useful << endl;
-                     cout << " Calling Perceptron Update (DEC) as a useful L2C_DEMAND was rejected and reseting valid_reject" << endl;
+                    cout << "[FILTER] " << __func__ << " not doing anything for check_addr: " << hex << check_addr << " cache_line: " << cache_line << dec;
+                    cout << " quotient: " << quotient << " valid_reject:" << valid_reject[quotient_reject];
+                    cout << " GHR.pf_issued: " << GHR.pf_issued << " GHR.pf_useful: " << GHR.pf_useful << endl;
+                    cout << " Calling Perceptron Update (DEC) as a useful L2C_DEMAND was rejected and reseting valid_reject" << endl;
 #endif
-                    if (train_neg) {
-                        // Not prefetched but could have been a good idea to prefetch
-                        PERC.perc_update(address_reject[quotient_reject], pc_reject[quotient_reject], pc_1_reject[quotient_reject], pc_2_reject[quotient_reject], pc_3_reject[quotient_reject], delta_reject[quotient_reject], last_signature_reject[quotient_reject], cur_signature_reject[quotient_reject], confidence_reject[quotient_reject], la_depth_reject[quotient_reject], 0, perc_sum_reject[quotient_reject]);
-                        valid_reject[quotient_reject] = 0;
-                        remainder_tag_reject[quotient_reject] = 0;
-                        // Printing Stats
-                        GHR.reject_update++;
-                    }
+                    // Not prefetched but could have been a good idea to prefetch
+                    PERC.perc_update(address_reject[quotient_reject], pc_reject[quotient_reject], pc_1_reject[quotient_reject], pc_2_reject[quotient_reject], pc_3_reject[quotient_reject], delta_reject[quotient_reject], last_signature_reject[quotient_reject], cur_signature_reject[quotient_reject], confidence_reject[quotient_reject], la_depth_reject[quotient_reject], 0, perc_sum_reject[quotient_reject]);
+                    valid_reject[quotient_reject] = 0;
+                    remainder_tag_reject[quotient_reject] = 0;
+                    // Printing Stats
+                    GHR.reject_update++;
+#endif
                 }
             }
             break;
