@@ -2,6 +2,10 @@
 #include <cstdlib>
 #include <ctime>
 
+#ifdef FEATUREOUT
+#include <fstream>
+#endif
+
 #define maxRRPV 3
 #define SHCT_SIZE  16384
 #define SHCT_PRIME 16381
@@ -10,6 +14,10 @@
 #define SHCT_MAX 7
 
 uint32_t rrpv[LLC_SET][LLC_WAY];
+
+#ifdef FEATUREOUT
+ofstream feature_file;
+#endif
 
 // sampler structure
 class SAMPLER_class
@@ -94,6 +102,10 @@ void CACHE::llc_initialize_replacement()
         } while (do_again);
         printf("rand_sets[%d]: %d\n", i, rand_sets[i]);
     }
+
+#ifdef FEATUREOUT
+    feature_file.open("ship_featureout.csv");
+#endif
 }
 
 // check if this set is sampled
@@ -244,6 +256,9 @@ void CACHE::llc_update_replacement_state(uint32_t cpu, uint32_t set, uint32_t wa
 
     //cout << "CPU: " << cpu << "  LLC " << setw(9) << TYPE_NAME << " set: " << setw(5) << set << " way: " << setw(2) << way;
     //cout << hex << " paddr: " << setw(12) << full_addr << " ip: " << setw(8) << ip << " victim_addr: " << victim_addr << dec << endl;
+#ifdef FEATUREOUT
+    feature_file << set << "," << way << "," << full_addr << "," << ip << "," << victim_addr << endl;
+#endif
 
     // handle writeback access
     if (type == WRITEBACK) {
@@ -279,7 +294,10 @@ void CACHE::llc_update_replacement_state(uint32_t cpu, uint32_t set, uint32_t wa
 // use this function to print out your own stats at the end of simulation
 void CACHE::llc_replacement_final_stats()
 {
-
+#ifdef FEATUREOUT
+    feature_file.flush();
+    feature_file.close();
+#endif
 }
 
 /* vim: set filetype=cpp: */
