@@ -13,7 +13,7 @@ SIGNATURE_TABLE ST;
 PATTERN_TABLE   PT;
 PREFETCH_FILTER FILTER;
 GLOBAL_REGISTER GHR;
-PERCEPTRON PERC;
+PERCEPTRON PERC_MASTER, PERC_LEARNER;
 
 #ifdef FEATUREOUT
 ofstream tracefile;
@@ -24,6 +24,12 @@ void CACHE::l2c_prefetcher_initialize()
 #ifdef FEATUREOUT
     tracefile.open("spp_featureout.csv");
 #endif
+
+    PERC_MASTER.crossbar_idx[0] = 0;
+    PERC_MASTER.crossbar_idx[1] = 1;
+    PERC_MASTER.crossbar_idx[2] = 2;
+    PERC_MASTER.crossbar_idx[3] = 3;
+    PERC_MASTER.crossbar_idx[4] = 4;
 }
 
 uint32_t CACHE::l2c_prefetcher_operate(uint64_t addr, uint64_t ip, uint8_t cache_hit, uint8_t type, uint32_t metadata_in)
@@ -215,14 +221,14 @@ void CACHE::l2c_prefetcher_final_stats()
     for (int i = 0; i < PERC_ENTRIES; i++) {
         //row = row + "Entry#: " + std::to_string(i) + ",";
         for (int j = 0; j < PERC_FEATURES_OUT; j++) {
-            if (PERC.perc_touched[i][j]) {
-                row = row + std::to_string(PERC.perc_weights[i][j]) + ",";
+            if (PERC_MASTER.perc_touched[i][j]) {
+                row = row + std::to_string(PERC_MASTER.perc_weights[i][j]) + ",";
             }
             else {
                 row = row + ",";
-                if (PERC.perc_weights[i][j] != 0) {
+                if (PERC_MASTER.perc_weights[i][j] != 0) {
                     // Throw assertion if the weight is tagged as untouched and still non-zero
-                    //cout << "I:" << i << "\tJ: "<< j << "\tWeight: " << PERC.perc_weights[i][j] << endl;
+                    //cout << "I:" << i << "\tJ: "<< j << "\tWeight: " << PERC_MASTER.perc_weights[i][j] << endl;
                     //assert(0);
                 }
             }
@@ -464,7 +470,18 @@ void PATTERN_TABLE::read_pattern(uint32_t curr_sig, int *delta_q, uint32_t *conf
             local_conf = (100 * c_delta[set][way]) / c_sig[set];
             pf_conf = depth ? (GHR.global_accuracy * c_delta[set][way] / c_sig[set] * lookahead_conf / 100) : local_conf;
 
-            int32_t perc_sum = PERC.perc_predict(train_addr, curr_ip, GHR.ip_1, GHR.ip_2, GHR.ip_3, train_delta + delta[set][way], last_sig, curr_sig, pf_conf, depth);
+            PERC_DATA data;
+            data.base_addr = train_addr;
+            data.ip = curr_ip;
+            data.ip_1 = GHR.ip_1;
+            data.ip_2 = GHR.ip_2;
+            data.ip_3 = GHR.ip_3;
+            data.last_sig = last_sig;
+            data.curr_sig = curr_sig;
+            data.confidence = pf_conf;
+            data.depth = depth;
+            data.cur_delta = train_delta + delta[set][way];
+            int32_t perc_sum = PERC_MASTER.perc_predict(data);
             bool do_pf = (perc_sum >= PERC_THRESHOLD_LO) ? 1 : 0;
 
             // Now checking against the L2C_MSHR_SIZE
@@ -653,7 +670,18 @@ bool PREFETCH_FILTER::check(uint64_t check_addr, uint64_t base_addr, uint64_t ip
 
                 if (valid[quotient]) {
                     // Prefetch leads to a demand hit
-                    PERC.perc_update(address[quotient], pc[quotient], pc_1[quotient], pc_2[quotient], pc_3[quotient], delta[quotient], last_signature[quotient], cur_signature[quotient], confidence[quotient], la_depth[quotient], 1, perc_sum[quotient]);
+                    PERC_DATA data;
+                    data.base_addr = address[quotient],
+                    data.ip = pc[quotient],
+                    data.ip_1 = pc_1[quotient],
+                    data.ip_2 = pc_2[quotient],
+                    data.ip_3 = pc_3[quotient],
+                    data.cur_delta = delta[quotient],
+                    data.last_sig = last_signature[quotient],
+                    data.curr_sig = cur_signature[quotient],
+                    data.confidence = confidence[quotient],
+                    data.depth = la_depth[quotient],
+                    PERC_MASTER.perc_update(data, 1, perc_sum[quotient]);
 
                     // Histogramming Idea
                     int32_t perc_sum_shifted = perc_sum[quotient] + (PERC_COUNTER_MAX+1)*PERC_FEATURES_OUT;
@@ -661,9 +689,9 @@ bool PREFETCH_FILTER::check(uint64_t check_addr, uint64_t base_addr, uint64_t ip
                     hist_hits[hist_index]++;
                 }
             }
+#ifdef PPF_TRAIN_NEG
             //If NOT Prefetched
             if (!(valid[quotient] && remainder_tag[quotient] == remainder)) {
-#ifdef PPF_TRAIN_NEG
                 // AND If Rejected by Perc
                 if (valid_reject[quotient_reject] && remainder_tag_reject[quotient_reject] == remainder_reject) {
 #ifndef NDEBUG
@@ -671,16 +699,27 @@ bool PREFETCH_FILTER::check(uint64_t check_addr, uint64_t base_addr, uint64_t ip
                     cout << " quotient: " << quotient << " valid_reject:" << valid_reject[quotient_reject];
                     cout << " GHR.pf_issued: " << GHR.pf_issued << " GHR.pf_useful: " << GHR.pf_useful << endl;
                     cout << " Calling Perceptron Update (DEC) as a useful L2C_DEMAND was rejected and reseting valid_reject" << endl;
-#endif
+#endif //NDEBUG
                     // Not prefetched but could have been a good idea to prefetch
-                    PERC.perc_update(address_reject[quotient_reject], pc_reject[quotient_reject], pc_1_reject[quotient_reject], pc_2_reject[quotient_reject], pc_3_reject[quotient_reject], delta_reject[quotient_reject], last_signature_reject[quotient_reject], cur_signature_reject[quotient_reject], confidence_reject[quotient_reject], la_depth_reject[quotient_reject], 0, perc_sum_reject[quotient_reject]);
+                    PERC_DATA data;
+                    data.base_addr = address[quotient_reject],
+                    data.ip = pc[quotient_reject],
+                    data.ip_1 = pc_1[quotient_reject],
+                    data.ip_2 = pc_2[quotient_reject],
+                    data.ip_3 = pc_3[quotient_reject],
+                    data.cur_delta = delta[quotient_reject],
+                    data.last_sig = last_signature[quotient_reject],
+                    data.curr_sig = cur_signature[quotient_reject],
+                    data.confidence = confidence[quotient_reject],
+                    data.depth = la_depth[quotient_reject],
+                    PERC_MASTER.perc_update(data, 0, perc_sum_reject[quotient_reject]);
                     valid_reject[quotient_reject] = 0;
                     remainder_tag_reject[quotient_reject] = 0;
                     // Printing Stats
                     GHR.reject_update++;
-#endif
                 }
             }
+#endif
             break;
 
         case L2C_EVICT:
@@ -697,7 +736,18 @@ bool PREFETCH_FILTER::check(uint64_t check_addr, uint64_t base_addr, uint64_t ip
 #endif
 
                 // Prefetch leads to eviction
-                PERC.perc_update(address[quotient], pc[quotient], pc_1[quotient], pc_2[quotient], pc_3[quotient], delta[quotient], last_signature[quotient], cur_signature[quotient], confidence[quotient], la_depth[quotient], 0, perc_sum[quotient]);
+                PERC_DATA data;
+                data.base_addr = address[quotient],
+                data.ip = pc[quotient],
+                data.ip_1 = pc_1[quotient],
+                data.ip_2 = pc_2[quotient],
+                data.ip_3 = pc_3[quotient],
+                data.cur_delta = delta[quotient],
+                data.last_sig = last_signature[quotient],
+                data.curr_sig = cur_signature[quotient],
+                data.confidence = confidence[quotient],
+                data.depth = la_depth[quotient],
+                PERC_MASTER.perc_update(data, 0, perc_sum[quotient]);
             }
             // Reset filter entry
             valid[quotient] = 0;
@@ -822,45 +872,45 @@ int get_perc_utility(PERCEPTRON perc)
     return A*sum + B*abssum;
 }
 
-void get_perc_index(uint64_t base_addr, uint64_t ip, uint64_t ip_1, uint64_t ip_2, uint64_t ip_3, int32_t cur_delta, uint32_t last_sig, uint32_t curr_sig, uint32_t confidence, uint32_t depth, uint64_t perc_set[PERC_FEATURES_IN])
+void get_perc_index(PERC_DATA data, uint64_t perc_set[PERC_FEATURES_IN])
 {
     // Returns the imdexes for the perceptron tables
-    uint64_t cache_line = base_addr >> LOG2_BLOCK_SIZE,
-             page_addr  = base_addr >> LOG2_PAGE_SIZE;
+    uint64_t cache_line = data.base_addr >> LOG2_BLOCK_SIZE,
+             page_addr  = data.base_addr >> LOG2_PAGE_SIZE;
 
-    int sig_delta = (cur_delta < 0) ? (((-1) * cur_delta) + (1 << (SIG_DELTA_BIT - 1))) : cur_delta;
+    int sig_delta = (data.cur_delta < 0) ? (((-1) * data.cur_delta) + (1 << (SIG_DELTA_BIT - 1))) : data.cur_delta;
 
-    perc_set[0] = base_addr;
+    perc_set[0] = data.base_addr;
     perc_set[1] = cache_line;
     perc_set[2] = page_addr;
-    perc_set[3] = confidence ^ page_addr;
-    perc_set[4] = curr_sig ^ sig_delta;
-    perc_set[5] = ip_1 ^ (ip_2>>1) ^ (ip_3>>2);
-    perc_set[6] = ip ^ depth;
-    perc_set[7] = ip ^ sig_delta;
-    perc_set[8] = confidence;
+    perc_set[3] = data.confidence ^ page_addr;
+    perc_set[4] = data.curr_sig ^ sig_delta;
+    perc_set[5] = data.ip_1 ^ (data.ip_2>>1) ^ (data.ip_3>>2);
+    perc_set[6] = data.ip ^ data.depth;
+    perc_set[7] = data.ip ^ sig_delta;
+    perc_set[8] = data.confidence;
 }
 
-int32_t PERCEPTRON::perc_predict(uint64_t base_addr, uint64_t ip, uint64_t ip_1, uint64_t ip_2, uint64_t ip_3, int32_t cur_delta, uint32_t last_sig, uint32_t curr_sig, uint32_t confidence, uint32_t depth)
+int32_t PERCEPTRON::perc_predict(PERC_DATA data)
 {
 #ifndef NDEBUG
-    int sig_delta = (cur_delta < 0) ? (((-1) * cur_delta) + (1 << (SIG_DELTA_BIT - 1))) : cur_delta;
-    cout << "[PERC_PRED] Current IP: " << ip << "  and  Memory Adress: " << hex << base_addr << endl;
-    cout << " Last Sig: " << last_sig << " Curr Sig: " << curr_sig << dec << endl;
-    cout << " Cur Delta: " << cur_delta << " Sign Delta: " << sig_delta << " Confidence: " << confidence<< endl;
+    int sig_delta = (data.cur_delta < 0) ? (((-1) * data.cur_delta) + (1 << (SIG_DELTA_BIT - 1))) : data.cur_delta;
+    cout << "[PERC_PRED] Current IP: " << data.ip << "  and  Memory Adress: " << hex << data.base_addr << endl;
+    cout << " Last Sig: " << data.last_sig << " Curr Sig: " << data.curr_sig << dec << endl;
+    cout << " Cur Delta: " << data.cur_delta << " Sign Delta: " << sig_delta << " Confidence: " << data.confidence<< endl;
     cout << " ";
 #endif
 
     uint64_t perc_set[PERC_FEATURES_IN];
     // Get the indexes in perc_set[]
-    get_perc_index(base_addr, ip, ip_1, ip_2, ip_3, cur_delta, last_sig, curr_sig, confidence, depth, perc_set);
+    get_perc_index(data, perc_set);
 
 #ifdef FEATUREOUT
-    cur_delta_signmag = std::abs(cur_delta) | (cur_delta < 0 ? 0x40 : 0);
-    tracefile << base_addr << "," << ip << "," << ip_1 << "," << ip_2 << "," << ip_3 << "," << cur_delta "," << cur_delta_signmag << "," << last_sig << "," << curr_sig << "," << confidence << "," << depth;
+    cur_delta_signmag = std::abs(data.cur_delta) | (data.cur_delta < 0 ? 0x40 : 0);
+    tracefile << data.base_addr << "," << data.ip << "," << data.ip_1 << "," << data.ip_2 << "," << data.ip_3 << "," << data.cur_delta "," << cur_delta_signmag << "," << data.last_sig << "," << data.curr_sig << "," << data.confidence << "," << data.depth;
     for (int i = 0; i < PERC_FEATURES_OUT; i++)
     {
-        tracefile << "," << perc_set[crossbar_idx[i]];
+        tracefile << "," << perc_set[crossbar_idx[i]] % PERC_ENTRIES;
     }
     tracefile << endl;
 #endif
@@ -868,7 +918,10 @@ int32_t PERCEPTRON::perc_predict(uint64_t base_addr, uint64_t ip, uint64_t ip_1,
     int32_t sum = 0;
     for (int i = 0; i < PERC_FEATURES_OUT; i++) {
         // Calculate Sum
-        sum += perc_weights[perc_set[crossbar_idx[i]]][i] % PERCEPTRON::PERC_DEPTH[i];
+#ifndef NDEBUG
+        cout << crossbar_idx[i] << " -> " << i << " (" << perc_set[crossbar_idx[i]] % PERC_ENTRIES << ")" << endl;
+#endif
+        sum += perc_weights[perc_set[crossbar_idx[i]] % PERC_ENTRIES][i] % PERCEPTRON::PERC_DEPTH[i];
     }
 #ifndef NDEBUG
     cout << " Sum of perceptrons: " << sum << " Prediction made: " << ((sum >= PERC_THRESHOLD_LO) ?  ((sum >= PERC_THRESHOLD_HI) ? FILL_L2 : FILL_LLC) : 0)  << endl;
@@ -877,19 +930,19 @@ int32_t PERCEPTRON::perc_predict(uint64_t base_addr, uint64_t ip, uint64_t ip_1,
     return sum;
 }
 
-void    PERCEPTRON::perc_update(uint64_t base_addr, uint64_t ip, uint64_t ip_1, uint64_t ip_2, uint64_t ip_3, int32_t cur_delta, uint32_t last_sig, uint32_t curr_sig, uint32_t confidence, uint32_t depth, bool direction, int32_t perc_sum)
+void    PERCEPTRON::perc_update(PERC_DATA data, bool direction, int32_t perc_sum)
 {
 #ifndef NDEBUG
-    int sig_delta = (cur_delta < 0) ? (((-1) * cur_delta) + (1 << (SIG_DELTA_BIT - 1))) : cur_delta;
-    cout << "[PERC_UPD] (Recorded) IP: " << ip << "  and  Memory Adress: " << hex << base_addr << endl;
-    cout << " Last Sig: " << last_sig << " Curr Sig: " << curr_sig << dec << endl;
-    cout << " Cur Delta: " << cur_delta << " Sign Delta: " << sig_delta << " Confidence: "<< confidence << " Update Direction: " << direction << endl;
+    int sig_delta = (data.cur_delta < 0) ? (((-1) * data.cur_delta) + (1 << (SIG_DELTA_BIT - 1))) : data.cur_delta;
+    cout << "[PERC_UPD] (Recorded) IP: " << data.ip << "  and  Memory Adress: " << hex << data.base_addr << endl;
+    cout << " Last Sig: " << data.last_sig << " Curr Sig: " << data.curr_sig << dec << endl;
+    cout << " Cur Delta: " << data.cur_delta << " Sign Delta: " << sig_delta << " Confidence: "<< data.confidence << " Update Direction: " << direction << endl;
     cout << " ";
 #endif
 
     uint64_t perc_set[PERC_FEATURES_IN];
     // Get the perceptron indexes
-    get_perc_index(base_addr, ip, ip_1, ip_2, ip_3, cur_delta, last_sig, curr_sig, confidence, depth, perc_set);
+    get_perc_index(data, perc_set);
 
     int32_t sum = 0;
 #ifdef SPP_PERC_WGHT
@@ -906,13 +959,13 @@ void    PERCEPTRON::perc_update(uint64_t base_addr, uint64_t ip, uint64_t ip_1, 
         for (int i = 0; i < PERC_FEATURES_OUT; i++) {
             if (sum >= PERC_THRESHOLD_HI) {
                 // Prediction was to prefectch -- so decrement counters
-                if (perc_weights[perc_set[crossbar_idx[i]]][i] > PERC_COUNTER_MIN )
-                    perc_weights[perc_set[crossbar_idx[i]]][i]--;
+                if (perc_weights[perc_set[crossbar_idx[i]] % PERC_ENTRIES][i] > PERC_COUNTER_MIN )
+                    perc_weights[perc_set[crossbar_idx[i]] % PERC_ENTRIES][i]--;
             }
             if (sum < PERC_THRESHOLD_HI) {
                 // Prediction was to not prefetch -- so increment counters
-                if (perc_weights[perc_set[crossbar_idx[i]]][i] < PERC_COUNTER_MAX)
-                    perc_weights[perc_set[crossbar_idx[i]]][i]++;
+                if (perc_weights[perc_set[crossbar_idx[i]] % PERC_ENTRIES][i] < PERC_COUNTER_MAX)
+                    perc_weights[perc_set[crossbar_idx[i]] % PERC_ENTRIES][i]++;
             }
         }
 #ifndef NDEBUG
@@ -926,8 +979,8 @@ void    PERCEPTRON::perc_update(uint64_t base_addr, uint64_t ip, uint64_t ip_1, 
         for (int i = 0; i < PERC_FEATURES_OUT; i++) {
             if (sum >= PERC_THRESHOLD_HI) {
                 // Prediction was to prefetch -- so increment counters
-                if (perc_weights[perc_set[crossbar_idx[i]]][i] < PERC_COUNTER_MAX)
-                    perc_weights[perc_set[crossbar_idx[i]]][i]++;
+                if (perc_weights[perc_set[crossbar_idx[i]] % PERC_ENTRIES][i] < PERC_COUNTER_MAX)
+                    perc_weights[perc_set[crossbar_idx[i]] % PERC_ENTRIES][i]++;
             }
             if (sum < PERC_THRESHOLD_HI) {
                 // Prediction was to not prefetch -- so decrement counters
