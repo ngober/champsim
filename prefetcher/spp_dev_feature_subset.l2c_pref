@@ -2,6 +2,7 @@
 
 #include <iostream>     // std::cout, std::endl
 #include <iomanip>      // std::setw
+#include <random>
 #include <string.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -30,6 +31,12 @@ void CACHE::l2c_prefetcher_initialize()
     PERC_MASTER.crossbar_idx[2] = 2;
     PERC_MASTER.crossbar_idx[3] = 3;
     PERC_MASTER.crossbar_idx[4] = 4;
+
+    PERC_LEARNER.crossbar_idx[0] = 1;
+    PERC_LEARNER.crossbar_idx[1] = 2;
+    PERC_LEARNER.crossbar_idx[2] = 3;
+    PERC_LEARNER.crossbar_idx[3] = 4;
+    PERC_LEARNER.crossbar_idx[4] = 5;
 }
 
 uint32_t CACHE::l2c_prefetcher_operate(uint64_t addr, uint64_t ip, uint8_t cache_hit, uint8_t type, uint32_t metadata_in)
@@ -481,17 +488,19 @@ void PATTERN_TABLE::read_pattern(uint32_t curr_sig, int *delta_q, uint32_t *conf
             data.confidence = pf_conf;
             data.depth = depth;
             data.cur_delta = train_delta + delta[set][way];
-            int32_t perc_sum = PERC_MASTER.perc_predict(data);
-            bool do_pf = (perc_sum >= PERC_THRESHOLD_LO) ? 1 : 0;
+            int32_t perc_master_sum = PERC_MASTER.perc_predict(data);
+            int32_t perc_learner_sum = PERC_LEARNER.perc_predict(data);
+            bool do_pf = (perc_master_sum >= PERC_THRESHOLD_LO);
+            bool disagree = do_pf ^ (perc_learner_sum >= PERC_THRESHOLD_LO);
 
             // Now checking against the L2C_MSHR_SIZE
             // Saving some slots in the internal PF queue by checking against do_pf
             if (pf_conf && pf_q_tail < L2C_MSHR_SIZE && do_pf ) {
                 confidence_q[pf_q_tail] = pf_conf;
                 delta_q[pf_q_tail] = delta[set][way];
-                perc_sum_q[pf_q_tail] = perc_sum;
+                perc_sum_q[pf_q_tail] = perc_master_sum;
 #ifndef NDEBUG
-                cout << "[PT] State of Features: \nTrain addr: " << train_addr << "\tCurr IP: " << curr_ip << "\tIP_1: " << GHR.ip_1 << "\tIP_2: " << GHR.ip_2 << "\tIP_3: " << GHR.ip_3 << "\tDelta: " << train_delta + delta[set][way] << "\tLastSig: " << last_sig << "\tCurrSig: " << curr_sig << "\tConf: " << pf_conf << "\tDepth: " << depth << "\tSUM: "<< perc_sum  << endl;
+                cout << "[PT] State of Features: \nTrain addr: " << train_addr << "\tCurr IP: " << curr_ip << "\tIP_1: " << GHR.ip_1 << "\tIP_2: " << GHR.ip_2 << "\tIP_3: " << GHR.ip_3 << "\tDelta: " << train_delta + delta[set][way] << "\tLastSig: " << last_sig << "\tCurrSig: " << curr_sig << "\tConf: " << pf_conf << "\tDepth: " << depth << "\tSUM: "<< perc_master_sum  << endl;
 #endif
                 // Lookahead path follows the most confident entry
                 if (pf_conf > max_conf) {
