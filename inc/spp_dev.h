@@ -191,7 +191,6 @@ class PREFETCH_FILTER {
                 valid_reject[set] = 0;
                 remainder_tag_reject[set] = 0;
             }
-            train_neg = 0;
         }
 
         bool     check(uint64_t pf_addr, uint64_t base_addr, uint64_t ip, FILTER_REQUEST filter_request, int32_t cur_delta, uint32_t last_sign, uint32_t cur_sign, uint32_t confidence, int32_t sum, uint32_t depth);
