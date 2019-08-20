@@ -13,7 +13,7 @@ SIGNATURE_TABLE ST;
 PATTERN_TABLE   PT;
 PREFETCH_FILTER FILTER;
 GLOBAL_REGISTER GHR;
-PERCEPTRON PERC;
+PERCEPTRON PERC_MASTER, PERC_LEARNER;
 
 #ifdef FEATUREOUT
 ofstream tracefile;
@@ -24,6 +24,12 @@ void CACHE::l2c_prefetcher_initialize()
 #ifdef FEATUREOUT
     tracefile.open("spp_featureout.csv");
 #endif
+
+    PERC_MASTER.crossbar_idx[0] = 0;
+    PERC_MASTER.crossbar_idx[1] = 1;
+    PERC_MASTER.crossbar_idx[2] = 2;
+    PERC_MASTER.crossbar_idx[3] = 3;
+    PERC_MASTER.crossbar_idx[4] = 4;
 }
 
 uint32_t CACHE::l2c_prefetcher_operate(uint64_t addr, uint64_t ip, uint8_t cache_hit, uint8_t type, uint32_t metadata_in)
@@ -215,14 +221,14 @@ void CACHE::l2c_prefetcher_final_stats()
     for (int i = 0; i < PERC_ENTRIES; i++) {
         //row = row + "Entry#: " + std::to_string(i) + ",";
         for (int j = 0; j < PERC_FEATURES_OUT; j++) {
-            if (PERC.perc_touched[i][j]) {
-                row = row + std::to_string(PERC.perc_weights[i][j]) + ",";
+            if (PERC_MASTER.perc_touched[i][j]) {
+                row = row + std::to_string(PERC_MASTER.perc_weights[i][j]) + ",";
             }
             else {
                 row = row + ",";
-                if (PERC.perc_weights[i][j] != 0) {
+                if (PERC_MASTER.perc_weights[i][j] != 0) {
                     // Throw assertion if the weight is tagged as untouched and still non-zero
-                    //cout << "I:" << i << "\tJ: "<< j << "\tWeight: " << PERC.perc_weights[i][j] << endl;
+                    //cout << "I:" << i << "\tJ: "<< j << "\tWeight: " << PERC_MASTER.perc_weights[i][j] << endl;
                     //assert(0);
                 }
             }
