@@ -196,6 +196,20 @@ class PREFETCH_FILTER {
         bool     check(uint64_t pf_addr, uint64_t base_addr, uint64_t ip, FILTER_REQUEST filter_request, int32_t cur_delta, uint32_t last_sign, uint32_t cur_sign, uint32_t confidence, int32_t sum, uint32_t depth);
 };
 
+typedef struct {
+    unsigned int base_addr: 24;
+    unsigned int ip: 12;
+    unsigned int ip_1: 12;
+    unsigned int ip_2: 12;
+    unsigned int ip_3: 12;
+      signed int cur_delta: 7;
+      //signed int last_delta: 7;
+    unsigned int last_sig: 10;
+    unsigned int curr_sig: 10;
+    unsigned int confidence: 7;
+    unsigned int depth: 4;
+} PERC_DATA;
+
 class PERCEPTRON {
     public:
         // Crossbar indices
@@ -228,8 +242,8 @@ class PERCEPTRON {
             }
         }
 
-        void    perc_update(uint64_t check_addr, uint64_t ip, uint64_t ip_1, uint64_t ip_2, uint64_t ip_3, int32_t cur_delta, uint32_t last_sig, uint32_t curr_sig, uint32_t confidence, uint32_t depth, bool direction, int32_t perc_sum);
-        int32_t perc_predict(uint64_t check_addr, uint64_t ip, uint64_t ip_1, uint64_t ip_2, uint64_t ip_3, int32_t cur_delta, uint32_t last_sig, uint32_t curr_sig, uint32_t confidence, uint32_t depth);
+        void    perc_update(PERC_DATA data, bool direction, int32_t perc_sum);
+        int32_t perc_predict(PERC_DATA data);
 };
 
 const int32_t PERCEPTRON::PERC_DEPTH[PERC_FEATURES_OUT] = { 1 << PERC_ELEM0_WIDTH, 1 << PERC_ELEM1_WIDTH, 1 << PERC_ELEM2_WIDTH, 1 << PERC_ELEM3_WIDTH, 1 << PERC_ELEM4_WIDTH};
