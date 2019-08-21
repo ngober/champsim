@@ -153,6 +153,7 @@ class PREFETCH_FILTER {
         cur_signature[FILTER_SET],
         la_depth[FILTER_SET];
 
+#ifdef PPF_TRAIN_NEG
         uint64_t remainder_tag_reject[FILTER_SET_REJ],
         pc_reject[FILTER_SET_REJ],
         pc_1_reject[FILTER_SET_REJ],
@@ -166,6 +167,7 @@ class PREFETCH_FILTER {
         confidence_reject[FILTER_SET_REJ],
         cur_signature_reject[FILTER_SET_REJ],
         la_depth_reject[FILTER_SET_REJ];
+#endif
 
         // Tried the set-dueling idea which din't work out
         uint32_t PSEL_1;
@@ -187,10 +189,12 @@ class PREFETCH_FILTER {
                 valid[set] = 0;
                 useful[set] = 0;
             }
+#ifdef PPF_TRAIN_NEG
             for (uint32_t set = 0; set < FILTER_SET_REJ; set++) {
                 valid_reject[set] = 0;
                 remainder_tag_reject[set] = 0;
             }
+#endif
         }
 
         bool     check(uint64_t pf_addr, uint64_t base_addr, uint64_t ip, FILTER_REQUEST filter_request, int32_t cur_delta, uint32_t last_sign, uint32_t cur_sign, uint32_t confidence, int32_t sum, uint32_t depth);
