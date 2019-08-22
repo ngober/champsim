@@ -1,5 +1,6 @@
 /* vim: set filetype=cpp: */
 
+#include <functional>
 #include <iostream>     // std::cout, std::endl
 #include <iomanip>      // std::setw
 #include <random>
@@ -15,6 +16,14 @@ PATTERN_TABLE   PT;
 PREFETCH_FILTER FILTER;
 GLOBAL_REGISTER GHR;
 PERCEPTRON PERC_MASTER, PERC_LEARNER;
+signed int learnedness, in_epoch
+
+int get_perc_utility(PERCEPTRON, int);
+int get_perc_utility(PERCEPTRON);
+
+std::default_random_engine _gen;
+std::uniform_int_distribution<int> _dist(0,PERC_FEATURES_OUT);
+randfeature = std::bind(_dist, _gen);
 
 #ifdef FEATUREOUT
 ofstream tracefile;
@@ -489,9 +498,7 @@ void PATTERN_TABLE::read_pattern(uint32_t curr_sig, int *delta_q, uint32_t *conf
             data.depth = depth;
             data.cur_delta = train_delta + delta[set][way];
             int32_t perc_master_sum = PERC_MASTER.perc_predict(data);
-            int32_t perc_learner_sum = PERC_LEARNER.perc_predict(data);
             bool do_pf = (perc_master_sum >= PERC_THRESHOLD_LO);
-            bool disagree = do_pf ^ (perc_learner_sum >= PERC_THRESHOLD_LO);
 
             // Now checking against the L2C_MSHR_SIZE
             // Saving some slots in the internal PF queue by checking against do_pf
@@ -542,6 +549,63 @@ void PATTERN_TABLE::read_pattern(uint32_t curr_sig, int *delta_q, uint32_t *conf
         cout << "global_accuracy: " << GHR.global_accuracy << " lookahead_conf: " << lookahead_conf << endl;
 #endif
     } else confidence_q[pf_q_tail] = 0;
+}
+
+// Possibly promote learner
+void perc_promote_check()
+{
+    if (in_epoch++ > TRAINING_EPOCH)
+    {
+        PERCEPTRON PERC_new = PERCEPTRON();
+        int midx0 = 0, midx1 = 1, lidx0 = 0, lidx1 = 1;
+
+        for (int i = 2; i < PERC_FEATURES_OUT; i++)
+        {
+            if (get_perc_utilty(PERC_MASTER, i) > get_perc_utility(PERC_MASTER, midx0))
+            {
+                midx1 = midx0;
+                midx0 = i;
+            }
+            else if (get_perc_utilty(PERC_MASTER, i) > get_perc_utility(PERC_MASTER, midx1))
+            {
+                midx1 = i;
+            }
+        }
+        for (int i = 0; i < PERC_FEATURES_OUT, i++)
+        {
+            // If the learner's feature has more utility than the maximum and the feature is not the same as the master's feature.
+            if ((get_perc_utilty(PERC_LEARNER, i) > get_perc_utility(PERC_LEARNER, lidx0)) && (PERC_LEARNER.crossbar_idx[i] != PERC_MASTER.crossbar_idx[lidx0]))
+            {
+                lidx1 = lidx0;
+                lidx0 = i;
+            }
+            else if ((get_perc_utilty(PERC_LEARNER, i) > get_perc_utility(PERC_LEARNER, lidx1)) && (PERC_LEARNER.crossbar_idx[i] != PERC_MASTER.crossbar_idx[lidx1]))
+            {
+                lidx1 = i;
+            }
+        }
+
+        PERC_new.crossbar_idx[0] = PERC_MASTER.crossbar_idx[midx0];
+        PERC_new.crossbar_idx[1] = PERC_MASTER.crossbar_idx[midx1];
+        PERC_new.crossbar_idx[2] = PERC_LEARNER.crossbar_idx[lidx0];
+        PERC_new.crossbar_idx[3] = PERC_LEARNER.crossbar_idx[lidx1];
+        PERC_new.crossbar_idx[4] = randfeature();
+
+        if (learnedness > 0)
+        {
+            PERC_MASTER  = PERC_LEARNER;
+            PERC_LEARNER = PERC_new;
+        }
+        else
+        {
+            PERC_LEARNER = PERC_new;
+        }
+
+        learnedness = 0;
+        in_epoch = 0;
+
+        //TODO reset prefetch table?
+    }
 }
 
 bool PREFETCH_FILTER::check(uint64_t check_addr, uint64_t base_addr, uint64_t ip, FILTER_REQUEST filter_request, int cur_delta, uint32_t last_sig, uint32_t curr_sig, uint32_t conf, int32_t sum, uint32_t depth)
@@ -848,7 +912,7 @@ uint32_t GLOBAL_REGISTER::check_entry(uint32_t page_offset)
     return max_conf_way;
 }
 
-int get_perc_utility(PERCEPTRON perc)
+int get_perc_utility(PERCEPTRON perc, int idx)
 {
     int sum = 0;
     int abssum = 0;
@@ -856,20 +920,17 @@ int get_perc_utility(PERCEPTRON perc)
     const int A = 1;
     const int B = 1;
 
-    for (int i = 0; i < PERC_FEATURES_OUT; i++)
+    for (int j = 0; j < PERCEPTRON::PERC_DEPTH[i]; i++)
     {
-        for (int j = 0; j < perc.PERC_DEPTH[i]; i++)
+        int val = perc.perc_weights[j][idx];
+        sum += val;
+        if (val > 0)
         {
-            int val = perc.perc_weights[j][i];
-            sum += val;
-            if (val > 0)
-            {
-                abssum += val;
-            }
-            else
-            {
-                abssum -= val;
-            }
+            abssum += val;
+        }
+        else
+        {
+            abssum -= val;
         }
     }
 
@@ -879,6 +940,18 @@ int get_perc_utility(PERCEPTRON perc)
     }
 
     return A*sum + B*abssum;
+}
+
+int get_perc_utility(PERCEPTRON perc)
+{
+    int sum = 0;
+
+    for (int i = 0; i < PERC_FEATURES_OUT; i++)
+    {
+        sum += get_perc_utility(perc, i);
+    }
+
+    return sum
 }
 
 void get_perc_index(PERC_DATA data, uint64_t perc_set[PERC_FEATURES_IN])
