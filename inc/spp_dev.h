@@ -169,21 +169,10 @@ class PREFETCH_FILTER {
         la_depth_reject[FILTER_SET_REJ];
 #endif
 
-        // Tried the set-dueling idea which din't work out
-        uint32_t PSEL_1;
-        uint32_t PSEL_2;
-
-        float hist_hits[55];
-        float hist_tots[55];
-
         PREFETCH_FILTER() {
             std::cout << std::endl << "Initialize PREFETCH FILTER" << std::endl;
             std::cout << "FILTER_SET: " << FILTER_SET << std::endl;
 
-            for (int i = 0; i < 55; i++) {
-                hist_hits[i] = 0;
-                hist_tots[i] = 0;
-            }
             for (uint32_t set = 0; set < FILTER_SET; set++) {
                 remainder_tag[set] = 0;
                 valid[set] = 0;
