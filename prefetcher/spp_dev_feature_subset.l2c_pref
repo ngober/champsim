@@ -115,13 +115,13 @@ uint32_t CACHE::l2c_prefetcher_operate(uint64_t addr, uint64_t ip, uint8_t cache
         PT.read_pattern(curr_sig, delta_q, confidence_q, perc_sum_q, lookahead_way, lookahead_conf, pf_q_tail, depth, addr, base_addr, train_addr, curr_ip, train_delta, last_sig);
 
         do_lookahead = 0;
-        for (uint32_t i = pf_q_head; i < pf_q_tail; i++) {
+        for (; pf_q_head < pf_q_tail; pf_q_head++) {
 
-            uint64_t pf_addr = (base_addr & ~(BLOCK_SIZE - 1)) + (delta_q[i] << LOG2_BLOCK_SIZE);
-            int32_t perc_sum   = perc_sum_q[i];
+            uint64_t pf_addr = (base_addr & ~(BLOCK_SIZE - 1)) + (delta_q[pf_q_head] << LOG2_BLOCK_SIZE);
+            int32_t perc_sum   = perc_sum_q[pf_q_head];
 
 #ifndef NDEBUG
-            cout << "[ChampSim] State of features: \nTrain addr: " << train_addr << "\tCurr IP: " << curr_ip << "\tIP_1: " << GHR.ip_1 << "\tIP_2: " << GHR.ip_2 << "\tIP_3: " << GHR.ip_3 << "\tDelta: " << train_delta + delta_q[i] << "\t:LastSig " << last_sig << "\t:CurrSig " << curr_sig << "\t:Conf " << confidence_q[i] << "\t:Depth " << depth << "\tSUM: "<< perc_sum  << endl;
+            cout << "[ChampSim] State of features: \nTrain addr: " << train_addr << "\tCurr IP: " << curr_ip << "\tIP_1: " << GHR.ip_1 << "\tIP_2: " << GHR.ip_2 << "\tIP_3: " << GHR.ip_3 << "\tDelta: " << train_delta + delta_q[pf_q_head] << "\t:LastSig " << last_sig << "\t:CurrSig " << curr_sig << "\t:Conf " << confidence_q[pf_q_head] << "\t:Depth " << depth << "\tSUM: "<< perc_sum  << endl;
 #endif
             FILTER_REQUEST fill_level = (perc_sum >= PERC_THRESHOLD_HI) ? SPP_L2C_PREFETCH : SPP_LLC_PREFETCH;
 
@@ -129,12 +129,7 @@ uint32_t CACHE::l2c_prefetcher_operate(uint64_t addr, uint64_t ip, uint8_t cache
 
                 // Filter checks for redundancy and returns FALSE if redundant
                 // Else it returns TRUE and logs the features for future retrieval
-                if (FILTER.check(pf_addr, train_addr, curr_ip, fill_level, train_delta + delta_q[i], last_sig, curr_sig, confidence_q[i], perc_sum, (depth-1))) {
-
-                    // Histogramming Idea
-                    int32_t perc_sum_shifted = perc_sum + (PERC_COUNTER_MAX+1)*PERC_FEATURES_OUT;
-                    int32_t hist_index = perc_sum_shifted / 10;
-                    FILTER.hist_tots[hist_index]++;
+                if (FILTER.check(pf_addr, train_addr, curr_ip, fill_level, train_delta + delta_q[pf_q_head], last_sig, curr_sig, confidence_q[pf_q_head], perc_sum, (depth-1))) {
 
                     //[DO NOT TOUCH]:
                     prefetch_line(ip, addr, pf_addr, ((fill_level == SPP_L2C_PREFETCH) ? FILL_L2 : FILL_LLC), metadata_in); // Use addr (not base_addr) to obey the same physical page boundary
@@ -164,18 +159,17 @@ uint32_t CACHE::l2c_prefetcher_operate(uint64_t addr, uint64_t ip, uint8_t cache
 #ifndef NDEBUG
                     cout << "[ChampSim] " << __func__ << " base_addr: " << hex << base_addr << " pf_addr: " << pf_addr;
                     cout << " pf_cache_line: " << (pf_addr >> LOG2_BLOCK_SIZE);
-                    cout << " prefetch_delta: " << dec << delta_q[i] << " confidence: " << confidence_q[i];
-                    cout << " depth: " << i << " fill_level: " << ((fill_level == SPP_L2C_PREFETCH) ? FILL_L2 : FILL_LLC) << endl;
+                    cout << " prefetch_delta: " << dec << delta_q[pf_q_head] << " confidence: " << confidence_q[pf_q_head];
+                    cout << " depth: " << depth << " fill_level: " << ((fill_level == SPP_L2C_PREFETCH) ? FILL_L2 : FILL_LLC) << endl;
 #endif
                 }
             } else { // Prefetch request is crossing the physical page boundary
 #ifdef GHR_ON
                     // Store this prefetch request in GHR to bootstrap SPP learning when we see a ST miss (i.e., accessing a new page)
-                    GHR.update_entry(curr_sig, confidence_q[i], (pf_addr >> LOG2_BLOCK_SIZE) & 0x3F, delta_q[i]);
+                    GHR.update_entry(curr_sig, confidence_q[pf_q_head], (pf_addr >> LOG2_BLOCK_SIZE) & 0x3F, delta_q[pf_q_head]);
 #endif
             }
             do_lookahead = 1;
-            pf_q_head++;
         }
 
         // Update base_addr and curr_sig
@@ -258,19 +252,6 @@ void CACHE::l2c_prefetcher_final_stats()
 #ifdef FEATUREOUT
     tracefile.flush();
     tracefile.close();
-#endif
-
-#ifndef NDEBUG
-    /*
-    cout << "\n\n****HISTOGRAMMING STATS****" << endl;
-    cout << "\tIndex\t\t hist_tots \t\t hist_hits \t\t hist_ratio" << endl;
-    for (int i = 0; i < 55; i++) {
-        float hist_ratio = 0;
-        if (FILTER.hist_tots[i] != 0)
-            hist_ratio = FILTER.hist_hits[i] / FILTER.hist_tots[i];
-        std::cout << std::setw(10) << i*10-(PERC_COUNTER_MAX+1)*PERC_FEATURES_OUT <<"   \t "<< std::setw(10) << int(FILTER.hist_tots[i]) <<" \t " << std::setw(10) << int(FILTER.hist_hits[i]) << " \t " << std::setw(10) << hist_ratio << std::endl;
-    }
-    */
 #endif
 }
 
@@ -530,14 +511,14 @@ void PATTERN_TABLE::read_pattern(uint32_t curr_sig, int *delta_q, uint32_t *conf
 #endif
             }
             // Recording Perc negatives
-            if (pf_conf && pf_q_tail < L2C_MSHR_SIZE && (perc_sum < PERC_THRESHOLD_HI) ) {
+            if (pf_conf && pf_q_tail < L2C_MSHR_SIZE && (perc_master_sum < PERC_THRESHOLD_HI) ) {
                 // Note: Using PERC_THRESHOLD_HI as the decising factor for negative case
                 // Because 'trueness' of a prefetch is decisded based on the feedback from L2C
                 // So even though LLC prefetches go through, they are treated as false wrt L2C in this case
                 uint64_t pf_addr = (base_addr & ~(BLOCK_SIZE - 1)) + (delta[set][way] << LOG2_BLOCK_SIZE);
 
                 if ((addr & ~(PAGE_SIZE - 1)) == (pf_addr & ~(PAGE_SIZE - 1))) { // Prefetch request is in the same physical page
-                    FILTER.check(pf_addr, train_addr, curr_ip, SPP_PERC_REJECT, train_delta + delta[set][way], last_sig, curr_sig, pf_conf, perc_sum, depth);
+                    FILTER.check(pf_addr, train_addr, curr_ip, SPP_PERC_REJECT, train_delta + delta[set][way], last_sig, curr_sig, pf_conf, perc_master_sum, depth);
                     GHR.perc_reject++;
                 }
             }
@@ -755,11 +736,6 @@ bool PREFETCH_FILTER::check(uint64_t check_addr, uint64_t base_addr, uint64_t ip
                     data.confidence = confidence[quotient],
                     data.depth = la_depth[quotient],
                     PERC_MASTER.perc_update(data, 1, perc_sum[quotient]);
-
-                    // Histogramming Idea
-                    int32_t perc_sum_shifted = perc_sum[quotient] + (PERC_COUNTER_MAX+1)*PERC_FEATURES_OUT;
-                    int32_t hist_index = perc_sum_shifted / 10;
-                    hist_hits[hist_index]++;
                 }
             }
 #ifdef PPF_TRAIN_NEG
@@ -827,9 +803,11 @@ bool PREFETCH_FILTER::check(uint64_t check_addr, uint64_t base_addr, uint64_t ip
             useful[quotient] = 0;
             remainder_tag[quotient] = 0;
 
+#ifdef PPF_TRAIN_NEG
             // Reset reject filter too
             valid_reject[quotient_reject] = 0;
             remainder_tag_reject[quotient_reject] = 0;
+#endif
 
             break;
 
