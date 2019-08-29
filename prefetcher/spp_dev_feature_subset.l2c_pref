@@ -16,14 +16,14 @@ PATTERN_TABLE   PT;
 PREFETCH_FILTER FILTER;
 GLOBAL_REGISTER GHR;
 PERCEPTRON PERC_MASTER, PERC_LEARNER;
-signed int learnedness, in_epoch
+signed int learnedness, in_epoch;
 
 int get_perc_utility(PERCEPTRON, int);
 int get_perc_utility(PERCEPTRON);
 
 std::default_random_engine _gen;
-std::uniform_int_distribution<int> _dist(0,PERC_FEATURES_OUT);
-randfeature = std::bind(_dist, _gen);
+std::uniform_int_distribution<int> _dist(0,PERC_FEATURES_IN);
+auto randfeature = std::bind(_dist, _gen);
 
 #ifdef FEATUREOUT
 ofstream tracefile;
@@ -41,11 +41,11 @@ void CACHE::l2c_prefetcher_initialize()
     PERC_MASTER.crossbar_idx[3] = 3;
     PERC_MASTER.crossbar_idx[4] = 4;
 
-    PERC_LEARNER.crossbar_idx[0] = 1;
-    PERC_LEARNER.crossbar_idx[1] = 2;
-    PERC_LEARNER.crossbar_idx[2] = 3;
-    PERC_LEARNER.crossbar_idx[3] = 4;
-    PERC_LEARNER.crossbar_idx[4] = 5;
+    PERC_LEARNER.crossbar_idx[0] = 4;
+    PERC_LEARNER.crossbar_idx[1] = 5;
+    PERC_LEARNER.crossbar_idx[2] = 6;
+    PERC_LEARNER.crossbar_idx[3] = 7;
+    PERC_LEARNER.crossbar_idx[4] = 8;
 }
 
 uint32_t CACHE::l2c_prefetcher_operate(uint64_t addr, uint64_t ip, uint8_t cache_hit, uint8_t type, uint32_t metadata_in)
@@ -542,25 +542,25 @@ void perc_promote_check()
 
         for (int i = 2; i < PERC_FEATURES_OUT; i++)
         {
-            if (get_perc_utilty(PERC_MASTER, i) > get_perc_utility(PERC_MASTER, midx0))
+            if (get_perc_utility(PERC_MASTER, i) > get_perc_utility(PERC_MASTER, midx0))
             {
                 midx1 = midx0;
                 midx0 = i;
             }
-            else if (get_perc_utilty(PERC_MASTER, i) > get_perc_utility(PERC_MASTER, midx1))
+            else if (get_perc_utility(PERC_MASTER, i) > get_perc_utility(PERC_MASTER, midx1))
             {
                 midx1 = i;
             }
         }
-        for (int i = 0; i < PERC_FEATURES_OUT, i++)
+        for (int i = 0; i < PERC_FEATURES_OUT; i++)
         {
             // If the learner's feature has more utility than the maximum and the feature is not the same as the master's feature.
-            if ((get_perc_utilty(PERC_LEARNER, i) > get_perc_utility(PERC_LEARNER, lidx0)) && (PERC_LEARNER.crossbar_idx[i] != PERC_MASTER.crossbar_idx[lidx0]))
+            if ((get_perc_utility(PERC_LEARNER, i) > get_perc_utility(PERC_LEARNER, lidx0)) && (PERC_LEARNER.crossbar_idx[i] != PERC_MASTER.crossbar_idx[lidx0]))
             {
                 lidx1 = lidx0;
                 lidx0 = i;
             }
-            else if ((get_perc_utilty(PERC_LEARNER, i) > get_perc_utility(PERC_LEARNER, lidx1)) && (PERC_LEARNER.crossbar_idx[i] != PERC_MASTER.crossbar_idx[lidx1]))
+            else if ((get_perc_utility(PERC_LEARNER, i) > get_perc_utility(PERC_LEARNER, lidx1)) && (PERC_LEARNER.crossbar_idx[i] != PERC_MASTER.crossbar_idx[lidx1]))
             {
                 lidx1 = i;
             }
@@ -572,15 +572,25 @@ void perc_promote_check()
         PERC_new.crossbar_idx[3] = PERC_LEARNER.crossbar_idx[lidx1];
         PERC_new.crossbar_idx[4] = randfeature();
 
-        if (learnedness > 0)
+        if (learnedness >= 0)
         {
+#ifndef NDEBUG
+            cout << "Promoting Learner with learnedness " << learnedness << endl;
+            cout << "   using master feature " << PERC_MASTER.crossbar_idx[midx0] << endl;
+            cout << "   using master feature " << PERC_MASTER.crossbar_idx[midx1] << endl;
+            cout << "   using self feature " << PERC_LEARNER.crossbar_idx[lidx0] << endl;
+            cout << "   using self feature " << PERC_LEARNER.crossbar_idx[lidx1] << endl;
+            cout << "   using random feature " << PERC_new.crossbar_idx[4] << endl;
+#endif
             PERC_MASTER  = PERC_LEARNER;
-            PERC_LEARNER = PERC_new;
         }
+#ifndef NDEBUG
         else
         {
-            PERC_LEARNER = PERC_new;
+            cout << "Rejecting Learner with learnedness " << learnedness << endl;
         }
+#endif
+        PERC_LEARNER = PERC_new;
 
         learnedness = 0;
         in_epoch = 0;
@@ -598,10 +608,34 @@ bool PREFETCH_FILTER::check(uint64_t check_addr, uint64_t base_addr, uint64_t ip
     uint64_t quotient = (hash >> REMAINDER_BIT) & ((1 << QUOTIENT_BIT) - 1),
              remainder = hash % (1 << REMAINDER_BIT);
 
+    PERC_DATA data;
+    data.base_addr = address[quotient];
+    data.ip = pc[quotient];
+    data.ip_1 = pc_1[quotient];
+    data.ip_2 = pc_2[quotient];
+    data.ip_3 = pc_3[quotient];
+    data.cur_delta = delta[quotient];
+    data.last_sig = last_signature[quotient];
+    data.curr_sig = cur_signature[quotient];
+    data.confidence = confidence[quotient];
+    data.depth = la_depth[quotient];
+
 #ifdef PPF_TRAIN_NEG
     //REJECT FILTER
     uint64_t quotient_reject = (hash >> REMAINDER_BIT_REJ) & ((1 << QUOTIENT_BIT_REJ) - 1),
              remainder_reject = hash % (1 << REMAINDER_BIT_REJ);
+
+    PERC_DATA data_reject;
+    data_reject.base_addr = address[quotient_reject];
+    data_reject.ip = pc[quotient_reject];
+    data_reject.ip_1 = pc_1[quotient_reject];
+    data_reject.ip_2 = pc_2[quotient_reject];
+    data_reject.ip_3 = pc_3[quotient_reject];
+    data_reject.cur_delta = delta[quotient_reject];
+    data_reject.last_sig = last_signature[quotient_reject];
+    data_reject.curr_sig = cur_signature[quotient_reject];
+    data_reject.confidence = confidence[quotient_reject];
+    data_reject.depth = la_depth[quotient_reject];
 #endif
 
 #ifndef NDEBUG
@@ -624,6 +658,7 @@ bool PREFETCH_FILTER::check(uint64_t check_addr, uint64_t base_addr, uint64_t ip
             } else {
 #ifdef PPF_TRAIN_NEG
                 valid_reject[quotient_reject] = 1;
+                disagree_reject[quotient] = PERC_LEARNER.perc_predict(data_reject) < PERC_THRESHOLD_LO;
                 remainder_tag_reject[quotient_reject] = remainder_reject;
 
                 // Logging perc features
@@ -660,6 +695,7 @@ bool PREFETCH_FILTER::check(uint64_t check_addr, uint64_t base_addr, uint64_t ip
 
                 valid[quotient] = 1;  // Mark as prefetched
                 useful[quotient] = 0; // Reset useful bit
+                disagree[quotient] = PERC_LEARNER.perc_predict(data) < PERC_THRESHOLD_LO;
                 remainder_tag[quotient] = remainder;
 
                 // Logging perc features
@@ -724,18 +760,17 @@ bool PREFETCH_FILTER::check(uint64_t check_addr, uint64_t base_addr, uint64_t ip
 
                 if (valid[quotient]) {
                     // Prefetch leads to a demand hit
-                    PERC_DATA data;
-                    data.base_addr = address[quotient],
-                    data.ip = pc[quotient],
-                    data.ip_1 = pc_1[quotient],
-                    data.ip_2 = pc_2[quotient],
-                    data.ip_3 = pc_3[quotient],
-                    data.cur_delta = delta[quotient],
-                    data.last_sig = last_signature[quotient],
-                    data.curr_sig = cur_signature[quotient],
-                    data.confidence = confidence[quotient],
-                    data.depth = la_depth[quotient],
-                    PERC_MASTER.perc_update(data, 1, perc_sum[quotient]);
+                    PERC_MASTER.perc_update(data, 1);
+                    PERC_LEARNER.perc_update(data, !disagree[quotient]);
+                    perc_promote_check();
+                    // The learner was incorrect
+                    if (disagree[quotient])
+                    {
+#ifndef NDEBUG
+                        cout << "Decrementing learnedness due to disagreement." << endl;
+#endif
+                        learnedness--;
+                    }
                 }
             }
 #ifdef PPF_TRAIN_NEG
@@ -750,18 +785,17 @@ bool PREFETCH_FILTER::check(uint64_t check_addr, uint64_t base_addr, uint64_t ip
                     cout << " Calling Perceptron Update (DEC) as a useful L2C_DEMAND was rejected and reseting valid_reject" << endl;
 #endif //NDEBUG
                     // Not prefetched but could have been a good idea to prefetch
-                    PERC_DATA data;
-                    data.base_addr = address[quotient_reject],
-                    data.ip = pc[quotient_reject],
-                    data.ip_1 = pc_1[quotient_reject],
-                    data.ip_2 = pc_2[quotient_reject],
-                    data.ip_3 = pc_3[quotient_reject],
-                    data.cur_delta = delta[quotient_reject],
-                    data.last_sig = last_signature[quotient_reject],
-                    data.curr_sig = cur_signature[quotient_reject],
-                    data.confidence = confidence[quotient_reject],
-                    data.depth = la_depth[quotient_reject],
-                    PERC_MASTER.perc_update(data, 0, perc_sum_reject[quotient_reject]);
+                    PERC_MASTER.perc_update(data_reject, 0);
+                    PERC_LEARNER.perc_update(data_reject, disagree[quotient]);
+                    perc_promote_check();
+                    // The learner was correct
+                    if (disagree[quotient])
+                    {
+#ifndef NDEBUG
+                        cout << "Incrementing learnedness due to disagreement." << endl;
+#endif
+                        learnedness++;
+                    }
                     valid_reject[quotient_reject] = 0;
                     remainder_tag_reject[quotient_reject] = 0;
                     // Printing Stats
@@ -784,19 +818,17 @@ bool PREFETCH_FILTER::check(uint64_t check_addr, uint64_t base_addr, uint64_t ip
                 cout << " Reseting valid_reject" << endl;
 #endif
 
-                // Prefetch leads to eviction
-                PERC_DATA data;
-                data.base_addr = address[quotient],
-                data.ip = pc[quotient],
-                data.ip_1 = pc_1[quotient],
-                data.ip_2 = pc_2[quotient],
-                data.ip_3 = pc_3[quotient],
-                data.cur_delta = delta[quotient],
-                data.last_sig = last_signature[quotient],
-                data.curr_sig = cur_signature[quotient],
-                data.confidence = confidence[quotient],
-                data.depth = la_depth[quotient],
-                PERC_MASTER.perc_update(data, 0, perc_sum[quotient]);
+                PERC_MASTER.perc_update(data, 0);
+                PERC_LEARNER.perc_update(data, disagree[quotient]);
+                perc_promote_check();
+                // The learner was correct
+                if (disagree[quotient])
+                {
+#ifndef NDEBUG
+                        cout << "Incrementing learnedness due to disagreement." << endl;
+#endif
+                    learnedness++;
+                }
             }
             // Reset filter entry
             valid[quotient] = 0;
@@ -898,7 +930,7 @@ int get_perc_utility(PERCEPTRON perc, int idx)
     const int A = 1;
     const int B = 1;
 
-    for (int j = 0; j < PERCEPTRON::PERC_DEPTH[i]; i++)
+    for (int j = 0; j < PERCEPTRON::PERC_DEPTH[idx]; j++)
     {
         int val = perc.perc_weights[j][idx];
         sum += val;
@@ -929,7 +961,7 @@ int get_perc_utility(PERCEPTRON perc)
         sum += get_perc_utility(perc, i);
     }
 
-    return sum
+    return sum;
 }
 
 void get_perc_index(PERC_DATA data, uint64_t perc_set[PERC_FEATURES_IN])
@@ -978,9 +1010,6 @@ int32_t PERCEPTRON::perc_predict(PERC_DATA data)
     int32_t sum = 0;
     for (int i = 0; i < PERC_FEATURES_OUT; i++) {
         // Calculate Sum
-#ifndef NDEBUG
-        cout << crossbar_idx[i] << " -> " << i << " (" << perc_set[crossbar_idx[i]] % PERC_ENTRIES << ")" << endl;
-#endif
         sum += perc_weights[perc_set[crossbar_idx[i]] % PERC_ENTRIES][i] % PERCEPTRON::PERC_DEPTH[i];
     }
 #ifndef NDEBUG
@@ -990,6 +1019,8 @@ int32_t PERCEPTRON::perc_predict(PERC_DATA data)
     return sum;
 }
 
+/*
+// direction = 1 means the sum was in the correct direction, 0 means it was in the wrong direction
 void    PERCEPTRON::perc_update(PERC_DATA data, bool direction, int32_t perc_sum)
 {
 #ifndef NDEBUG
@@ -1014,7 +1045,7 @@ void    PERCEPTRON::perc_update(PERC_DATA data, bool direction, int32_t perc_sum
     // Restore the sum that led to the prediction
     sum = perc_sum;
 
-    if (!direction) { // direction = 1 means the sum was in the correct direction, 0 means it was in the wrong direction
+    if (!direction) {
         // Prediction wrong
         for (int i = 0; i < PERC_FEATURES_OUT; i++) {
             if (sum >= PERC_THRESHOLD_HI) {
@@ -1057,3 +1088,44 @@ void    PERCEPTRON::perc_update(PERC_DATA data, bool direction, int32_t perc_sum
 #endif
     }
 }
+*/
+
+void PERCEPTRON::perc_update(PERC_DATA data, bool inc)
+{
+#ifndef NDEBUG
+    int sig_delta = (data.cur_delta < 0) ? (((-1) * data.cur_delta) + (1 << (SIG_DELTA_BIT - 1))) : data.cur_delta;
+    cout << "[PERC_UPD] (Recorded) IP: " << data.ip << "  and  Memory Adress: " << hex << data.base_addr << endl;
+    cout << " Last Sig: " << data.last_sig << " Curr Sig: " << data.curr_sig << dec << endl;
+    cout << " Cur Delta: " << data.cur_delta << " Sign Delta: " << sig_delta << " Confidence: "<< data.confidence << " Update Direction: " << inc << endl;
+    cout << " ";
+#endif
+
+    uint64_t perc_set[PERC_FEATURES_IN];
+    // Get the perceptron indexes
+    get_perc_index(data, perc_set);
+
+#ifdef SPP_PERC_WGHT
+    for (int i = 0; i < PERC_FEATURES_IN; i++) {
+        // Marking the weights as touched for final dumping in the csv
+        perc_touched[perc_set[i]][i] = 1;
+    }
+#endif
+
+    if (inc)
+    {
+        for (int i = 0; i < PERC_FEATURES_OUT; i++) {
+            // Prediction was to not prefetch -- so increment counters
+            if (perc_weights[perc_set[crossbar_idx[i]] % PERC_ENTRIES][i] < PERC_COUNTER_MAX)
+                perc_weights[perc_set[crossbar_idx[i]] % PERC_ENTRIES][i]++;
+        }
+    }
+    else
+    {
+        for (int i = 0; i < PERC_FEATURES_OUT; i++) {
+            // Prediction was to prefectch -- so decrement counters
+            if (perc_weights[perc_set[crossbar_idx[i]] % PERC_ENTRIES][i] > PERC_COUNTER_MIN )
+                perc_weights[perc_set[crossbar_idx[i]] % PERC_ENTRIES][i]--;
+        }
+    }
+}
+
