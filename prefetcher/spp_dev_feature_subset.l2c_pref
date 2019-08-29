@@ -9,7 +9,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include "cache.h"
-#include "spp_dev.h"
+#include "spp_dev_subset.h"
 
 SIGNATURE_TABLE ST;
 PATTERN_TABLE   PT;
