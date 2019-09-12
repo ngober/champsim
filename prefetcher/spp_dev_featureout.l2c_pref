@@ -20,6 +20,10 @@ PERCEPTRON PERC;
 
 #ifdef FEATUREOUT
 ofstream tracefile;
+
+vector<int> utility_buffer(10000);
+int utilityB = 0;
+int utilitycount = 0;
 #endif
 
 void CACHE::l2c_prefetcher_initialize()
@@ -822,6 +826,35 @@ void get_perc_index(uint64_t base_addr, uint64_t ip, uint64_t ip_1, uint64_t ip_
 #endif
 }
 
+int get_perc_utility(PERCEPTRON *perc, int idx)
+{
+    int sum = 0;
+    int abssum = 0;
+
+    const int B = 4;
+
+    for (int j = 0; j < perc->PERC_DEPTH[idx]; j++)
+    {
+        int val = perc->perc_weights[j][idx];
+        sum += val;
+        abssum += abs(val);
+    }
+
+    return abssum - B*abs(sum);
+}
+
+int get_perc_utility(PERCEPTRON *perc)
+{
+    int sum = 0;
+
+    for (int i = 0; i < PERC_FEATURES; i++)
+    {
+        sum += get_perc_utility(perc, i);
+    }
+
+    return sum;
+}
+
 int32_t PERCEPTRON::perc_predict(uint64_t base_addr, uint64_t ip, uint64_t ip_1, uint64_t ip_2, uint64_t ip_3, int32_t cur_delta, uint32_t last_sig, uint32_t curr_sig, uint32_t confidence, uint32_t depth)
 {
 #ifdef SPP_DEBUG_PRINT
@@ -836,21 +869,25 @@ int32_t PERCEPTRON::perc_predict(uint64_t base_addr, uint64_t ip, uint64_t ip_1,
     // Get the indexes in perc_set[]
     get_perc_index(base_addr, ip, ip_1, ip_2, ip_3, cur_delta, last_sig, curr_sig, confidence, depth, perc_set);
 
+    int32_t sum = 0;
 #ifdef FEATUREOUT
-    cur_delta_signmag = std::abs(cur_delta) | (cur_delta < 0 ? 0x40 : 0);
-    tracefile << base_addr << "," << ip << "," << ip_1 << "," << ip_2 << "," << ip_3 << "," << cur_delta "," << cur_delta_signmag << "," << last_sig << "," << curr_sig << "," << confidence << "," << depth;
-    for (int i = 0; i < PERC_FEATURES; i++)
-    {
-        tracefile << "," << perc_set[i];
+    int32_t abssum = 0;
+#endif
+    for (int i = 0; i < PERC_FEATURES; i++) {
+        // Calculate Sum
+        sum += perc_weights[perc_set[i]][i];
+#ifdef FEATUREOUT
+        abssum += abs(perc_weights[perc_set[i]][i]);
+#endif
     }
-    tracefile << endl;
+#ifdef FEATUREOUT
+    utilityB -= utility_buffer[utilitycount];
+    utilityB += abssum - 4*abs(sum);
+    utility_buffer[utilitycount] = abssum - 4*abs(sum);
+    utilitycount = (utilitycount+1) % 10000;
+    tracefile << get_perc_utility(this) << "," << utilityB << endl;
 #endif
 
-    int32_t sum = 0;
-    for (int i = 0; i < PERC_FEATURES; i++) {
-        sum += perc_weights[perc_set[i]][i];
-        // Calculate Sum
-    }
 #ifdef SPP_DEBUG_PRINT
     cout << " Sum of perceptrons: " << sum << " Prediction made: " << ((sum >= PERC_THRESHOLD_LO) ?  ((sum >= PERC_THRESHOLD_HI) ? FILL_L2 : FILL_LLC) : 0)  << endl;
 #endif
