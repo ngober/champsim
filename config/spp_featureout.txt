@@ -21,7 +21,7 @@ l2prefetcher=prefetcher/spp_dev_featureout.l2c_pref
 #CXX=g++
 #CFLAGS=-O2
 #CXXFLAGS=-Og -g
-CPPFLAGS=-DFEATUREOUT
+CPPFLAGS=-DFEATUREOUT -DUTILITY_BUF_SIZE=1000
 #LDFLAGS=-L/usr/lib
 #LDLIBS=-lm
 

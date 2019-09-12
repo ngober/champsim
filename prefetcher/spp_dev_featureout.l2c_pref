@@ -21,7 +21,7 @@ PERCEPTRON PERC;
 #ifdef FEATUREOUT
 ofstream tracefile;
 
-vector<int> utility_buffer(10000);
+vector<int> utility_buffer(UTILITY_BUF_SIZE);
 int utilityB = 0;
 int utilitycount = 0;
 #endif
@@ -884,7 +884,7 @@ int32_t PERCEPTRON::perc_predict(uint64_t base_addr, uint64_t ip, uint64_t ip_1,
     utilityB -= utility_buffer[utilitycount];
     utilityB += abssum - 4*abs(sum);
     utility_buffer[utilitycount] = abssum - 4*abs(sum);
-    utilitycount = (utilitycount+1) % 10000;
+    utilitycount = (utilitycount+1) % UTILITY_BUF_SIZE;
     tracefile << get_perc_utility(this) << "," << utilityB << endl;
 #endif
 
