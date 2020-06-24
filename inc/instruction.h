@@ -3,17 +3,17 @@
 
 
 // instruction format
-#define ROB_SIZE 352
-#define LQ_SIZE 128
-#define SQ_SIZE 72
-#define NUM_INSTR_DESTINATIONS_SPARC 4
-#define NUM_INSTR_DESTINATIONS 2
-#define NUM_INSTR_SOURCES 4
+constexpr unsigned int ROB_SIZE = 352;
+constexpr unsigned int LQ_SIZE = 128;
+constexpr unsigned int SQ_SIZE = 72;
+constexpr unsigned int NUM_INSTR_DESTINATIONS_SPARC = 4;
+constexpr unsigned int NUM_INSTR_DESTINATIONS = 2;
+constexpr unsigned int NUM_INSTR_SOURCES = 4;
 
 // special registers that help us identify branches
-#define REG_STACK_POINTER 6
-#define REG_FLAGS 25
-#define REG_INSTRUCTION_POINTER 26
+constexpr uint8_t REG_STACK_POINTER = 6;
+constexpr uint8_t REG_FLAGS = 25;
+constexpr uint8_t REG_INSTRUCTION_POINTER = 26;
 
 // branch types
 #define NOT_BRANCH           0

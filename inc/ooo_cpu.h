@@ -4,28 +4,28 @@
 #include "cache.h"
 
 #ifdef CRC2_COMPILE
-#define STAT_PRINTING_PERIOD 1000000
+constexpr unsigned int STAT_PRINTING_PERIOD = 1000000;
 #else
-#define STAT_PRINTING_PERIOD 10000000
+constexpr unsigned int STAT_PRINTING_PERIOD = 10000000;
 #endif
-#define DEADLOCK_CYCLE 1000000
+constexpr unsigned int DEADLOCK_CYCLE = 1000000;
 
 using namespace std;
 
 // CORE PROCESSOR
-#define FETCH_WIDTH 6
-#define DECODE_WIDTH 6
-#define EXEC_WIDTH 6
-#define LQ_WIDTH 2
-#define SQ_WIDTH 2
-#define RETIRE_WIDTH 5
-#define SCHEDULER_SIZE 128
-#define BRANCH_MISPREDICT_PENALTY 1
-//#define SCHEDULING_LATENCY 0
-//#define EXEC_LATENCY 0
-//#define DECODE_LATENCY 2
+constexpr unsigned int FETCH_WIDTH = 6;
+constexpr unsigned int DECODE_WIDTH = 6;
+constexpr unsigned int EXEC_WIDTH = 6;
+constexpr unsigned int LQ_WIDTH = 2;
+constexpr unsigned int SQ_WIDTH = 2;
+constexpr unsigned int RETIRE_WIDTH = 5;
+constexpr unsigned int SCHEDULER_SIZE = 128;
+constexpr unsigned int BRANCH_MISPREDICT_PENALTY = 1;
+//constexpr unsigned int SCHEDULING_LATENCY = 0;
+//constexpr unsigned int EXEC_LATENCY = 0;
+//constexpr unsigned int DECODE_LATENCY = 2;
 
-#define STA_SIZE (ROB_SIZE*NUM_INSTR_DESTINATIONS_SPARC)
+constexpr unsigned int STA_SIZE = (ROB_SIZE*NUM_INSTR_DESTINATIONS_SPARC);
 
 extern uint32_t SCHEDULING_LATENCY, EXEC_LATENCY, DECODE_LATENCY;
 

@@ -79,7 +79,7 @@ void O3_CPU::read_from_trace()
                     }
                 }
 
-                for (int i=0; i<NUM_INSTR_SOURCES; i++) {
+                for (std::size_t i=0; i<NUM_INSTR_SOURCES; i++) {
                     arch_instr.source_registers[i] = current_cloudsuite_instr.source_registers[i];
                     arch_instr.source_memory[i] = current_cloudsuite_instr.source_memory[i];
                     arch_instr.source_virtual_address[i] = current_cloudsuite_instr.source_memory[i];
@@ -236,7 +236,7 @@ void O3_CPU::read_from_trace()
                     }
                 }
 
-                for (int i=0; i<NUM_INSTR_SOURCES; i++) {
+                for (std::size_t i=0; i<NUM_INSTR_SOURCES; i++) {
                     arch_instr.source_registers[i] = current_instr.source_registers[i];
                     arch_instr.source_memory[i] = current_instr.source_memory[i];
                     arch_instr.source_virtual_address[i] = current_instr.source_memory[i];

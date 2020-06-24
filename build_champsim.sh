@@ -73,9 +73,9 @@ fi
 # Check for multi-core
 if [ "$NUM_CORE" -gt "1" ]; then
     echo "Building multi-core ChampSim..."
-    sed -i.bak 's/\<NUM_CPUS 1\>/NUM_CPUS '${NUM_CORE}'/g' inc/champsim.h
-#	sed -i.bak 's/\<DRAM_CHANNELS 1\>/DRAM_CHANNELS 2/g' inc/champsim.h
-#	sed -i.bak 's/\<DRAM_CHANNELS_LOG2 0\>/DRAM_CHANNELS_LOG2 1/g' inc/champsim.h
+    sed -i.bak 's/\<NUM_CPUS = 1U\>/NUM_CPUS = '${NUM_CORE}'U/g' inc/champsim.h
+#	sed -i.bak 's/\<DRAM_CHANNELS 1\>/DRAM_CHANNELS 2U/g' inc/champsim.h
+#	sed -i.bak 's/\<DRAM_CHANNELS_LOG2 0\>/DRAM_CHANNELS_LOG2 1U/g' inc/champsim.h
 else
     if [ "$NUM_CORE" -lt "1" ]; then
         echo "Number of core: $NUM_CORE must be greater or equal than 1"

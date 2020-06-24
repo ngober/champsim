@@ -267,35 +267,6 @@ void signal_handler(int signal)
 	exit(1);
 }
 
-// log base 2 function from efectiu
-int lg2(int n)
-{
-    int i, m = n, c = -1;
-    for (i=0; m; i++) {
-        m /= 2;
-        c++;
-    }
-    return c;
-}
-
-uint64_t rotl64 (uint64_t n, unsigned int c)
-{
-    const unsigned int mask = (CHAR_BIT*sizeof(n)-1);
-
-    assert ( (c<=mask) &&"rotate by type width or more");
-    c &= mask;  // avoid undef behaviour with NDEBUG.  0 overhead for most types / compilers
-    return (n<<c) | (n>>( (-c)&mask ));
-}
-
-uint64_t rotr64 (uint64_t n, unsigned int c)
-{
-    const unsigned int mask = (CHAR_BIT*sizeof(n)-1);
-
-    assert ( (c<=mask) &&"rotate by type width or more");
-    c &= mask;  // avoid undef behaviour with NDEBUG.  0 overhead for most types / compilers
-    return (n>>c) | (n<<( (-c)&mask ));
-}
-
 RANDOM champsim_rand(champsim_seed);
 uint64_t va_to_pa(uint32_t cpu, uint64_t instr_id, uint64_t va, uint64_t unique_vpage, uint8_t is_code)
 {
@@ -305,7 +276,7 @@ uint64_t va_to_pa(uint32_t cpu, uint64_t instr_id, uint64_t va, uint64_t unique_
 #endif
 
     uint8_t  swap = 0;
-    uint64_t high_bit_mask = rotr64(cpu, lg2(NUM_CPUS)),
+    uint64_t high_bit_mask = rotr(cpu, lg2(NUM_CPUS)),
              unique_va = va | high_bit_mask;
     //uint64_t vpage = unique_va >> LOG2_PAGE_SIZE,
     uint64_t vpage = unique_vpage | high_bit_mask,
@@ -590,13 +561,13 @@ int main(int argc, char** argv)
     // end consequence of knobs
 
     // search through the argv for "-traces"
-    int found_traces = 0;
-    int count_traces = 0;
+    std::size_t found_traces = 0;
+    std::size_t count_traces = 0;
     cout << endl;
     for (int i=0; i<argc; i++) {
         if (found_traces)
         {
-            printf("CPU %d runs %s\n", count_traces, argv[i]);
+            std::cout << "CPU " << count_traces << " runs " << argv[i] << std::endl;
 
             sprintf(ooo_cpu[count_traces].trace_string, "%s", argv[i]);
 
@@ -685,7 +656,7 @@ int main(int argc, char** argv)
     // TODO: can we initialize these variables from the class constructor?
     srand(seed_number);
     champsim_seed = seed_number;
-    for (int i=0; i<NUM_CPUS; i++) {
+    for (std::size_t i=0; i<NUM_CPUS; i++) {
 
         ooo_cpu[i].cpu = i; 
         ooo_cpu[i].warmup_instructions = warmup_instructions;
@@ -794,7 +765,7 @@ int main(int argc, char** argv)
         elapsed_minute -= elapsed_hour*60;
         elapsed_second -= (elapsed_hour*3600 + elapsed_minute*60);
 
-        for (int i=0; i<NUM_CPUS; i++) {
+        for (std::size_t i=0; i<NUM_CPUS; i++) {
             // proceed one cycle
             current_core_cycle[i]++;
 

@@ -16,73 +16,73 @@ extern uint32_t PAGE_TABLE_LATENCY, SWAP_LATENCY;
 #define IS_LLC  6
 
 // INSTRUCTION TLB
-#define ITLB_SET 16
-#define ITLB_WAY 4
-#define ITLB_RQ_SIZE 16
-#define ITLB_WQ_SIZE 16
-#define ITLB_PQ_SIZE 0
-#define ITLB_MSHR_SIZE 8
-#define ITLB_LATENCY 1
+constexpr unsigned int ITLB_SET = 16;
+constexpr unsigned int ITLB_WAY = 4;
+constexpr unsigned int ITLB_RQ_SIZE = 16;
+constexpr unsigned int ITLB_WQ_SIZE = 16;
+constexpr unsigned int ITLB_PQ_SIZE = 0;
+constexpr unsigned int ITLB_MSHR_SIZE = 8;
+constexpr unsigned int ITLB_LATENCY = 1;
 
 // DATA TLB
-#define DTLB_SET 16
-#define DTLB_WAY 4
-#define DTLB_RQ_SIZE 16
-#define DTLB_WQ_SIZE 16
-#define DTLB_PQ_SIZE 0
-#define DTLB_MSHR_SIZE 8
-#define DTLB_LATENCY 1
+constexpr unsigned int DTLB_SET = 16;
+constexpr unsigned int DTLB_WAY = 4;
+constexpr unsigned int DTLB_RQ_SIZE = 16;
+constexpr unsigned int DTLB_WQ_SIZE = 16;
+constexpr unsigned int DTLB_PQ_SIZE = 0;
+constexpr unsigned int DTLB_MSHR_SIZE = 8;
+constexpr unsigned int DTLB_LATENCY = 1;
 
 // SECOND LEVEL TLB
-#define STLB_SET 128
-#define STLB_WAY 12
-#define STLB_RQ_SIZE 32
-#define STLB_WQ_SIZE 32
-#define STLB_PQ_SIZE 0
-#define STLB_MSHR_SIZE 16
-#define STLB_LATENCY 8
+constexpr unsigned int STLB_SET = 128;
+constexpr unsigned int STLB_WAY = 12;
+constexpr unsigned int STLB_RQ_SIZE = 32;
+constexpr unsigned int STLB_WQ_SIZE = 32;
+constexpr unsigned int STLB_PQ_SIZE = 0;
+constexpr unsigned int STLB_MSHR_SIZE = 16;
+constexpr unsigned int STLB_LATENCY = 8;
 
 // L1 INSTRUCTION CACHE
-#define L1I_SET 64
-#define L1I_WAY 8
-#define L1I_RQ_SIZE 64
-#define L1I_WQ_SIZE 64 
-#define L1I_PQ_SIZE 32
-#define L1I_MSHR_SIZE 8
-#define L1I_LATENCY 4
+constexpr unsigned int L1I_SET = 64;
+constexpr unsigned int L1I_WAY = 8;
+constexpr unsigned int L1I_RQ_SIZE = 64;
+constexpr unsigned int L1I_WQ_SIZE = 64 ;
+constexpr unsigned int L1I_PQ_SIZE = 32;
+constexpr unsigned int L1I_MSHR_SIZE = 8;
+constexpr unsigned int L1I_LATENCY = 4;
 
 // L1 DATA CACHE
-#define L1D_SET 64
-#define L1D_WAY 12
-#define L1D_RQ_SIZE 64
-#define L1D_WQ_SIZE 64 
-#define L1D_PQ_SIZE 8
-#define L1D_MSHR_SIZE 16
-#define L1D_LATENCY 5 
+constexpr unsigned int L1D_SET = 64;
+constexpr unsigned int L1D_WAY = 12;
+constexpr unsigned int L1D_RQ_SIZE = 64;
+constexpr unsigned int L1D_WQ_SIZE = 64 ;
+constexpr unsigned int L1D_PQ_SIZE = 8;
+constexpr unsigned int L1D_MSHR_SIZE = 16;
+constexpr unsigned int L1D_LATENCY = 5 ;
 
 // L2 CACHE
-#define L2C_SET 1024
-#define L2C_WAY 8
-#define L2C_RQ_SIZE 32
-#define L2C_WQ_SIZE 32
-#define L2C_PQ_SIZE 16
-#define L2C_MSHR_SIZE 32
-#define L2C_LATENCY 10  // 4/5 (L1I or L1D) + 10 = 14/15 cycles
+constexpr unsigned int L2C_SET = 1024;
+constexpr unsigned int L2C_WAY = 8;
+constexpr unsigned int L2C_RQ_SIZE = 32;
+constexpr unsigned int L2C_WQ_SIZE = 32;
+constexpr unsigned int L2C_PQ_SIZE = 16;
+constexpr unsigned int L2C_MSHR_SIZE = 32;
+constexpr unsigned int L2C_LATENCY = 10;  // 4/5 (L1I or L1D) + 10 = 14/15 cycles
 
 // LAST LEVEL CACHE
-#define LLC_SET NUM_CPUS*2048
-#define LLC_WAY 16
-#define LLC_RQ_SIZE NUM_CPUS*L2C_MSHR_SIZE //48
-#define LLC_WQ_SIZE NUM_CPUS*L2C_MSHR_SIZE //48
-#define LLC_PQ_SIZE NUM_CPUS*32
-#define LLC_MSHR_SIZE NUM_CPUS*64
-#define LLC_LATENCY 20  // 4/5 (L1I or L1D) + 10 + 20 = 34/35 cycles
+constexpr unsigned int LLC_SET = NUM_CPUS*2048;
+constexpr unsigned int LLC_WAY = 16;
+constexpr unsigned int LLC_RQ_SIZE = NUM_CPUS*L2C_MSHR_SIZE; //48
+constexpr unsigned int LLC_WQ_SIZE = NUM_CPUS*L2C_MSHR_SIZE; //48
+constexpr unsigned int LLC_PQ_SIZE = NUM_CPUS*32;
+constexpr unsigned int LLC_MSHR_SIZE = NUM_CPUS*64;
+constexpr unsigned int LLC_LATENCY = 20;  // 4/5 (L1I or L1D) + 10 + 20 = 34/35 cycles
 
 class CACHE : public MEMORY {
   public:
     uint32_t cpu;
     const string NAME;
-    const uint32_t NUM_SET, NUM_WAY, NUM_LINE, WQ_SIZE, RQ_SIZE, PQ_SIZE, MSHR_SIZE;
+    const unsigned int NUM_SET, NUM_WAY, NUM_LINE, WQ_SIZE, RQ_SIZE, PQ_SIZE, MSHR_SIZE;
     uint32_t LATENCY;
     BLOCK **block;
     int fill_level;
