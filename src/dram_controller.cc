@@ -1,8 +1,14 @@
 #include "dram_controller.h"
 
+#include <array>
+#include <cstdlib>
+
 // initialized in main.cc
 uint32_t DRAM_MTPS, DRAM_DBUS_RETURN_TIME,
          tRP, tRCD, tCAS;
+
+extern std::array<uint64_t, DRAM_PAGES> ppage_nru;
+extern std::array<uint64_t, DRAM_PAGES> ppage_alloc;
 
 void MEMORY_CONTROLLER::reset_remain_requests(PACKET_QUEUE *queue, uint32_t channel)
 {
@@ -281,6 +287,7 @@ void MEMORY_CONTROLLER::process(PACKET_QUEUE *queue)
 
     uint8_t  op_type = queue->entry[request_index].type;
     uint64_t op_addr = queue->entry[request_index].address;
+    assert(ppage_alloc[op_addr >> LOG2_PAGE_SIZE]);
     uint32_t op_cpu = queue->entry[request_index].cpu,
              op_channel = dram_get_channel(op_addr), 
              op_rank = dram_get_rank(op_addr), 
@@ -331,6 +338,7 @@ void MEMORY_CONTROLLER::process(PACKET_QUEUE *queue)
                 cout << " current_cycle: " << current_core_cycle[op_cpu] << " event_cycle: " << queue->entry[request_index].event_cycle << endl; });
 
                 // send data back to the core cache hierarchy
+                ppage_nru[op_addr >> LOG2_PAGE_SIZE] = false;
                 upper_level_dcache[op_cpu]->return_data(&queue->entry[request_index]);
 
                 if (bank_request[op_channel][op_rank][op_bank].row_buffer_hit)
@@ -417,6 +425,7 @@ int MEMORY_CONTROLLER::add_rq(PACKET *packet)
 {
     // simply return read requests with dummy response before the warmup
     if (all_warmup_complete < NUM_CPUS) {
+        ppage_nru[packet->address >> LOG2_PAGE_SIZE] = false;
         if (packet->instruction) 
             upper_level_icache[packet->cpu]->return_data(packet);
         if (packet->is_data)

@@ -111,6 +111,7 @@ void CACHE::handle_fill()
                     writeback_packet.ip = 0; // writeback does not have ip
                     writeback_packet.type = WRITEBACK;
                     writeback_packet.event_cycle = current_core_cycle[fill_cpu];
+                    writeback_packet.is_translation = block[set][way].is_translation;
 
                     lower_level->add_wq(&writeback_packet);
                 }
@@ -444,6 +445,7 @@ void CACHE::handle_writeback()
                             writeback_packet.ip = 0;
                             writeback_packet.type = WRITEBACK;
                             writeback_packet.event_cycle = current_core_cycle[writeback_cpu];
+                            writeback_packet.is_translation = block[set][way].is_translation;
 
                             lower_level->add_wq(&writeback_packet);
                         }
@@ -669,24 +671,11 @@ void CACHE::handle_read()
 		    {
 		      // add it to mshr (read miss)
 		      add_mshr(&RQ.entry[index]);
-		      
-		      // add it to the next level's read queue
-		      if (lower_level)
-                        lower_level->add_rq(&RQ.entry[index]);
-		      else { // this is the last level
-                        if (cache_type == IS_STLB) {
-			  // TODO: need to differentiate page table walk and actual swap
-			  
-			  // emulate page table walk
-			  //uint64_t pa = va_to_pa(read_cpu, RQ.entry[index].instr_id, RQ.entry[index].full_addr, RQ.entry[index].address, 0);
-			  uint64_t pa = va_to_pa(read_cpu, RQ.entry[index].instr_id, RQ.entry[index].full_addr, (RQ.entry[index].full_addr)>>LOG2_PAGE_SIZE, 0);
-			  
-			  RQ.entry[index].data = pa >> LOG2_PAGE_SIZE; 
-			  RQ.entry[index].event_cycle = current_core_cycle[read_cpu];
-			  return_data(&RQ.entry[index]);
-                        }
-		      }
-		    }
+
+              // add it to the next level's read queue
+              assert(lower_level);
+              lower_level->add_rq(&RQ.entry[index]);
+            }
                 }
                 else {
                     if ((mshr_index == -1) && (MSHR.occupancy == MSHR_SIZE)) { // not enough MSHR resource
@@ -1117,6 +1106,7 @@ void CACHE::fill_cache(uint32_t set, uint32_t way, PACKET *packet)
     block[set][way].dirty = 0;
     block[set][way].prefetch = (packet->type == PREFETCH) ? 1 : 0;
     block[set][way].used = 0;
+    block[set][way].is_translation = packet->is_translation;
 
     if (block[set][way].prefetch)
         pf_fill++;
@@ -1242,6 +1232,7 @@ int CACHE::add_rq(PACKET *packet)
             assert(0);
         else if (cache_type == IS_L1I)
             assert(0);
+        assert(!WQ.entry[wq_index].is_translation);
 #endif
         // update processed packets
         if ((cache_type == IS_L1D) && (packet->type != PREFETCH)) {
@@ -1438,6 +1429,7 @@ int CACHE::prefetch_line(uint64_t ip, uint64_t base_addr, uint64_t pf_addr, int 
             pf_packet.ip = ip;
             pf_packet.type = PREFETCH;
             pf_packet.event_cycle = current_core_cycle[cpu];
+            pf_packet.is_translation = false;
 
             // give a dummy 0 as the IP of a prefetch
             add_pq(&pf_packet);
@@ -1480,6 +1472,7 @@ int CACHE::kpc_prefetch_line(uint64_t base_addr, uint64_t pf_addr, int pf_fill_l
             pf_packet.signature = signature;
             pf_packet.confidence = confidence;
             pf_packet.event_cycle = current_core_cycle[cpu];
+            pf_packet.is_translation = false;
 
             // give a dummy 0 as the IP of a prefetch
             add_pq(&pf_packet);
@@ -1521,6 +1514,7 @@ int CACHE::va_prefetch_line(uint64_t ip, uint64_t pf_addr, int pf_fill_level, ui
       pf_packet.ip = ip;
       pf_packet.type = PREFETCH;
       pf_packet.event_cycle = 0;
+      pf_packet.is_translation = true;
 
       int vapq_index = VAPQ.check_queue(&pf_packet);
       if(vapq_index != -1)
@@ -1547,63 +1541,55 @@ int CACHE::va_prefetch_line(uint64_t ip, uint64_t pf_addr, int pf_fill_level, ui
 
 void CACHE::va_translate_prefetches()
 {
-  // move translated prefetches from the VAPQ to the regular PQ
-  uint32_t vapq_index = VAPQ.head;
-  if (PQ.occupancy < PQ.SIZE)
+    // move translated prefetches from the VAPQ to the regular PQ
+    if (PQ.occupancy < PQ.SIZE)
     {
-      for(uint32_t i=0; i<VAPQ.SIZE; i++)
-	{
-	  // identify a VA prefetch that is fully translated
-	  if((VAPQ.entry[vapq_index].address != 0) && (VAPQ.entry[vapq_index].address != VAPQ.entry[vapq_index].v_address))
-	    {
-	      // move the translated prefetch over to the regular PQ
-	      add_pq(&VAPQ.entry[vapq_index]);
-
-	      // remove the prefetch from the VAPQ
-	      VAPQ.remove_queue(&VAPQ.entry[vapq_index]);
-
-	      break;
-	    }
-	  vapq_index++;
-	  if(vapq_index >= VAPQ.SIZE)
-	    {
-	      vapq_index = 0;
-	    }
-	}
-    }
-
-  // TEMPORARY SOLUTION: mark prefetches as translated after a fixed latency
-  vapq_index = VAPQ.head;
-  for(uint32_t i=0; i<VAPQ.SIZE; i++)
-    {
-      if((VAPQ.entry[vapq_index].address == VAPQ.entry[vapq_index].v_address) && (VAPQ.entry[vapq_index].event_cycle <= current_core_cycle[cpu]))
+        for(uint32_t vapq_index=0; i<VAPQ.tail; i++)
         {
-	  VAPQ.entry[vapq_index].full_addr = va_to_pa(cpu, 0, VAPQ.entry[vapq_index].full_v_addr, (VAPQ.entry[vapq_index].full_v_addr)>>LOG2_PAGE_SIZE, 0);
-	  VAPQ.entry[vapq_index].address = (VAPQ.entry[vapq_index].full_addr)>>LOG2_BLOCK_SIZE;
-          break;
-        }
-      vapq_index++;
-      if(vapq_index >= VAPQ.SIZE)
-        {
-          vapq_index = 0;
+            // identify a VA prefetch that is fully translated
+            if((VAPQ.entry[vapq_index].address != 0) && (VAPQ.entry[vapq_index].address != VAPQ.entry[vapq_index].v_address))
+            {
+                // move the translated prefetch over to the regular PQ
+                add_pq(&VAPQ.entry[vapq_index]);
+
+                // remove the prefetch from the VAPQ
+                VAPQ.remove_queue(&VAPQ.entry[vapq_index]);
+
+                break;
+            }
+            vapq_index++;
+            if(vapq_index >= VAPQ.SIZE)
+            {
+                vapq_index = 0;
+            }
         }
     }
 
-  // initiate translation of new items in VAPQ
-  vapq_index = VAPQ.head;
-  for(uint32_t i=0; i<VAPQ.SIZE; i++)
+    // Initiate translation
+    for(uint32_t vapq_index=0; i<VAPQ.tail; i++)
     {
-      if((VAPQ.entry[vapq_index].address == VAPQ.entry[vapq_index].v_address) && (VAPQ.entry[vapq_index].event_cycle == 0))
-	{
-	  VAPQ.entry[vapq_index].event_cycle = current_core_cycle[cpu] + VA_PREFETCH_TRANSLATION_LATENCY;
-	  break;
-	}
-      vapq_index++;
-      if(vapq_index >= VAPQ.SIZE)
-	{
-	  vapq_index = 0;
-	}
+        if((VAPQ.entry[vapq_index].address == VAPQ.entry[vapq_index].v_address) && (VAPQ.entry[vapq_index].event_cycle <= current_core_cycle[cpu]))
+        {
+            translator->add_rq(&VAPQ[vapq_index]);
+            break;
+        }
+
+        vapq_index++;
+        if(vapq_index >= VAPQ.SIZE)
+        {
+            vapq_index = 0;
+        }
     }
+}
+
+void CACHE::return_translation(PACKET *packet)
+{
+    int index = VAPQ.check_queue(packet);
+    assert(index >= 0);
+
+    VAPQ.entry[index].full_addr = packet->data;
+    VAPQ.entry[index].address = (VAPQ.entry[vapq_index].full_addr)>>LOG2_BLOCK_SIZE;
+    VAPQ.entry[index].event_cycle = current_core_cycle[cpu];
 }
 
 int CACHE::add_pq(PACKET *packet)

@@ -34,10 +34,16 @@
 #endif
 
 template<typename T>
+constexpr T lg(T n, std::size_t base)
+{
+    static_assert(std::is_unsigned<T>::value, "lg defined only for unsigned values");
+    return n < base ? 1 : lg(n/base,base)+1;
+}
+
+template<typename T>
 constexpr T lg2(T n)
 {
-    static_assert(std::is_unsigned<T>::value, "lg2 defined only for unsigned values");
-    return n < 2 ? n : lg2(n>>1)+1;
+    return lg(n,2);
 }
 
 template<typename T>
@@ -101,27 +107,7 @@ extern uint64_t current_core_cycle[NUM_CPUS],
                 last_drc_write_mode,
                 drc_blocks;
 
-extern queue <uint64_t> page_queue;
-extern map <uint64_t, uint64_t> page_table, inverse_table, recent_page, unique_cl[NUM_CPUS];
-extern uint64_t previous_ppage, num_adjacent_page, num_cl[NUM_CPUS], allocated_pages, num_page[NUM_CPUS], minor_fault[NUM_CPUS], major_fault[NUM_CPUS];
+extern uint64_t minor_fault[NUM_CPUS], major_fault[NUM_CPUS];
 
 void print_stats();
-uint64_t va_to_pa(uint32_t cpu, uint64_t instr_id, uint64_t va, uint64_t unique_vpage, uint8_t is_code);
-
-// smart random number generator
-class RANDOM {
-  public:
-    std::random_device rd;
-    std::mt19937_64 engine{rd()};
-    std::uniform_int_distribution<uint64_t> dist{0, 0xFFFFFFFFF}; // used to generate random physical page numbers
-
-    RANDOM (uint64_t seed) {
-        engine.seed(seed);
-    }
-
-    uint64_t draw_rand() {
-        return dist(engine);
-    };
-};
-extern uint64_t champsim_seed;
 #endif

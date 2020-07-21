@@ -2,6 +2,7 @@
 #define OOO_CPU_H
 
 #include "cache.h"
+#include "page_walker.h"
 
 #ifdef CRC2_COMPILE
 constexpr unsigned int STAT_PRINTING_PERIOD = 1000000;
@@ -90,10 +91,12 @@ class O3_CPU {
           L1D{"L1D", L1D_SET, L1D_WAY, L1D_SET*L1D_WAY, L1D_WQ_SIZE, L1D_RQ_SIZE, L1D_PQ_SIZE, L1D_MSHR_SIZE},
           L2C{"L2C", L2C_SET, L2C_WAY, L2C_SET*L2C_WAY, L2C_WQ_SIZE, L2C_RQ_SIZE, L2C_PQ_SIZE, L2C_MSHR_SIZE};
 
+    PageWalker page_walker;
+
   // trace cache for previously decoded instructions
   
     // constructor
-    O3_CPU() {
+    O3_CPU() : page_walker(0x400) {
         cpu = 0;
 
         // trace

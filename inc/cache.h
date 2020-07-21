@@ -3,9 +3,6 @@
 
 #include "memory_class.h"
 
-// PAGE
-extern uint32_t PAGE_TABLE_LATENCY, SWAP_LATENCY;
-
 // CACHE TYPE
 #define IS_ITLB 0
 #define IS_DTLB 1
@@ -92,6 +89,8 @@ class CACHE : public MEMORY {
     uint32_t MAX_READ, MAX_FILL;
     uint32_t reads_available_this_cycle;
     uint8_t cache_type;
+
+    CACHE *translator;
 
     // prefetch stats
     uint64_t pf_requested,

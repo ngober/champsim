@@ -13,6 +13,8 @@ class BLOCK {
             dirty,
             used;
 
+    bool is_translation;
+
     int delta,
         depth,
         signature,
@@ -76,6 +78,8 @@ class PACKET {
             fetched,
             prefetched,
             drc_tag_read;
+
+    bool is_translation;
 
     int fill_level, 
         pf_origin_level,

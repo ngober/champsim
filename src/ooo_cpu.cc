@@ -464,13 +464,13 @@ uint32_t O3_CPU::add_to_ifetch_buffer(ooo_model_instr *arch_instr)
   IFETCH_BUFFER.entry[index].event_cycle = current_core_cycle[cpu];
 
   // magically translate instructions
-  uint64_t instr_pa = va_to_pa(cpu, IFETCH_BUFFER.entry[index].instr_id, IFETCH_BUFFER.entry[index].ip , (IFETCH_BUFFER.entry[index].ip)>>LOG2_PAGE_SIZE, 1);
-  instr_pa >>= LOG2_PAGE_SIZE;
-  instr_pa <<= LOG2_PAGE_SIZE;
-  instr_pa |= (IFETCH_BUFFER.entry[index].ip & ((1 << LOG2_PAGE_SIZE) - 1));  
-  IFETCH_BUFFER.entry[index].instruction_pa = instr_pa;
-  IFETCH_BUFFER.entry[index].translated = COMPLETED;
-  IFETCH_BUFFER.entry[index].fetched = 0;
+  //uint64_t instr_pa = va_to_pa(cpu, IFETCH_BUFFER.entry[index].instr_id, IFETCH_BUFFER.entry[index].ip , (IFETCH_BUFFER.entry[index].ip)>>LOG2_PAGE_SIZE, 1);
+  //instr_pa >>= LOG2_PAGE_SIZE;
+  //instr_pa <<= LOG2_PAGE_SIZE;
+  //instr_pa |= (IFETCH_BUFFER.entry[index].ip & ((1 << LOG2_PAGE_SIZE) - 1));  
+  //IFETCH_BUFFER.entry[index].instruction_pa = instr_pa;
+  //IFETCH_BUFFER.entry[index].translated = COMPLETED;
+  //IFETCH_BUFFER.entry[index].fetched = 0;
   // end magic
   
   IFETCH_BUFFER.occupancy++;
@@ -801,41 +801,7 @@ void O3_CPU::decode_and_dispatch()
 
 int O3_CPU::prefetch_code_line(uint64_t pf_v_addr)
 {
-  if(pf_v_addr == 0)
-    {
-      cerr << "Cannot prefetch code line 0x0 !!!" << endl;
-      assert(0);
-    }
-  
-  L1I.pf_requested++;
-
-  if (L1I.PQ.occupancy < L1I.PQ.SIZE)
-    {
-      // magically translate prefetches
-      uint64_t pf_pa = (va_to_pa(cpu, 0, pf_v_addr, pf_v_addr>>LOG2_PAGE_SIZE, 1) & (~((1 << LOG2_PAGE_SIZE) - 1))) | (pf_v_addr & ((1 << LOG2_PAGE_SIZE) - 1));
-
-      PACKET pf_packet;
-      pf_packet.instruction = 1; // this is a code prefetch
-      pf_packet.is_data = 0;
-      pf_packet.fill_level = FILL_L1;
-      pf_packet.fill_l1i = 1;
-      pf_packet.pf_origin_level = FILL_L1;
-      pf_packet.cpu = cpu;
-
-      pf_packet.address = pf_pa >> LOG2_BLOCK_SIZE;
-      pf_packet.full_addr = pf_pa;
-
-      pf_packet.ip = pf_v_addr;
-      pf_packet.type = PREFETCH;
-      pf_packet.event_cycle = current_core_cycle[cpu];
-
-      L1I.add_pq(&pf_packet);    
-      L1I.pf_issued++;
-    
-      return 1;
-    }
-  
- return 0;
+    return L1I.va_prefetch_line(0, pf_v_addr, FILL_L1I, 0);
 }
 
 // TODO: When should we update ROB.schedule_event_cycle?
