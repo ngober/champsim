@@ -81,8 +81,7 @@ class O3_CPU {
     circular_buffer<uint32_t, ROB_SIZE> ready_to_execute;
 
     // Ready-To-Load
-    uint32_t RTL0[LQ_SIZE], RTL0_head, RTL0_tail, 
-             RTL1[LQ_SIZE], RTL1_head, RTL1_tail;  
+    circular_buffer<uint32_t, LQ_SIZE> RTL0, RTL1;
 
     // Ready-To-Store
     uint32_t RTS0[SQ_SIZE], RTS0_head, RTS0_tail,
@@ -149,15 +148,6 @@ class O3_CPU {
 	    total_branch_types[i] = 0;
 	  }
 	
-        for (uint32_t i=0; i<LQ_SIZE; i++) {
-	  RTL0[i] = LQ_SIZE;
-	  RTL1[i] = LQ_SIZE;
-        }
-        RTL0_head = 0;
-        RTL1_head = 0;
-        RTL0_tail = 0;
-        RTL1_tail = 0;
-
         for (uint32_t i=0; i<SQ_SIZE; i++) {
 	  RTS0[i] = SQ_SIZE;
 	  RTS1[i] = SQ_SIZE;

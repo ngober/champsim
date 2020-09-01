@@ -1129,14 +1129,11 @@ void O3_CPU::add_load_queue(uint32_t rob_index, uint32_t data_index)
     ROB.entry[rob_index].source_added[data_index] = 1;
 
     if (LQ.entry[lq_index].virtual_address && (LQ.entry[lq_index].producer_id == UINT64_MAX)) { // not released and no forwarding
-        RTL0[RTL0_tail] = lq_index;
-        RTL0_tail++;
-        if (RTL0_tail == LQ_SIZE)
-            RTL0_tail = 0;
+        RTL0.push_back(lq_index);
 
         DP (if (warmup_complete[cpu]) {
-        cout << "[RTL0] " << __func__ << " instr_id: " << LQ.entry[lq_index].instr_id << " rob_index: " << LQ.entry[lq_index].rob_index << " is added to RTL0";
-        cout << " head: " << RTL0_head << " tail: " << RTL0_tail << endl; }); 
+                std::cout << "[RTL0] " << __func__ << " instr_id: " << LQ.entry[lq_index].instr_id << " rob_index: " << LQ.entry[lq_index].rob_index << " is added to RTL0" << std::endl;
+                });
     }
 
     DP(if(warmup_complete[cpu]) {
@@ -1316,8 +1313,8 @@ void O3_CPU::operate_lsq()
     unsigned load_issued = 0;
     num_iteration = 0;
     while (load_issued < LQ_WIDTH) {
-        if (RTL0[RTL0_head] < LQ_SIZE) {
-            uint32_t lq_index = RTL0[RTL0_head];
+        if (!RTL0.empty()) {
+            uint32_t lq_index = RTL0.front();
             if (LQ.entry[lq_index].event_cycle <= current_core_cycle[cpu]) {
 
                 // add it to DTLB
@@ -1341,8 +1338,8 @@ void O3_CPU::operate_lsq()
                 data_packet.event_cycle = LQ.entry[lq_index].event_cycle;
 
                 DP (if (warmup_complete[cpu]) {
-                cout << "[RTL0] " << __func__ << " instr_id: " << LQ.entry[lq_index].instr_id << " rob_index: " << LQ.entry[lq_index].rob_index << " is popped to RTL0";
-                cout << " head: " << RTL0_head << " tail: " << RTL0_tail << endl; }); 
+                        std::cout << "[RTL0] " << __func__ << " instr_id: " << LQ.entry[lq_index].instr_id << " rob_index: " << LQ.entry[lq_index].rob_index << " is popped to RTL0" << std::endl;
+                        });
 
                 int rq_index = DTLB.add_rq(&data_packet);
 
@@ -1351,11 +1348,7 @@ void O3_CPU::operate_lsq()
                 else  
                     LQ.entry[lq_index].translated = INFLIGHT;
 
-                RTL0[RTL0_head] = LQ_SIZE;
-                RTL0_head++;
-                if (RTL0_head == LQ_SIZE)
-                    RTL0_head = 0;
-
+                RTL0.pop_front();
                 load_issued++;
             }
         }
@@ -1372,24 +1365,19 @@ void O3_CPU::operate_lsq()
 
     num_iteration = 0;
     while (load_issued < LQ_WIDTH) {
-        if (RTL1[RTL1_head] < LQ_SIZE) {
-            uint32_t lq_index = RTL1[RTL1_head];
+        if (!RTL1.empty()) {
+            uint32_t lq_index = RTL1.front();
             if (LQ.entry[lq_index].event_cycle <= current_core_cycle[cpu]) {
                 int rq_index = execute_load(LQ.entry[lq_index].rob_index, lq_index, LQ.entry[lq_index].data_index);
 
                 if (rq_index != -2) {
-                    RTL1[RTL1_head] = LQ_SIZE;
-                    RTL1_head++;
-                    if (RTL1_head == LQ_SIZE)
-                        RTL1_head = 0;
+                    RTL1.pop_front();
 
                     load_issued++;
                 }
             }
         }
         else {
-            //DP (if (warmup_complete[cpu]) {
-            //cout << "[RTL1] is empty head: " << RTL1_head << " tail: " << RTL1_tail << endl; });
             break;
         }
 
@@ -1807,14 +1795,11 @@ void O3_CPU::complete_data_fetch(PACKET_QUEUE *queue, uint8_t is_it_tlb)
             LQ.entry[lq_index].translated = COMPLETED;
             LQ.entry[lq_index].event_cycle = current_core_cycle[cpu];
 
-            RTL1[RTL1_tail] = lq_index;
-            RTL1_tail++;
-            if (RTL1_tail == LQ_SIZE)
-                RTL1_tail = 0;
+            RTL1.push_back(lq_index);
 
             DP (if (warmup_complete[cpu]) {
-            cout << "[RTL1] " << __func__ << " instr_id: " << LQ.entry[lq_index].instr_id << " rob_index: " << LQ.entry[lq_index].rob_index << " is added to RTL1";
-            cout << " head: " << RTL1_head << " tail: " << RTL1_tail << endl; }); 
+                    std::cout << "[RTL1] " << __func__ << " instr_id: " << LQ.entry[lq_index].instr_id << " rob_index: " << LQ.entry[lq_index].rob_index << " is added to RTL1" << std::endl;
+                    });
 
             DP (if (warmup_complete[cpu]) {
             cout << "[ROB] " << __func__ << " load instr_id: " << LQ.entry[lq_index].instr_id;
@@ -1899,14 +1884,11 @@ void O3_CPU::handle_o3_fetch(PACKET *current_packet, uint32_t cache_type)
             LQ.entry[lq_index].physical_address = (current_packet->data_pa << LOG2_PAGE_SIZE) | (LQ.entry[lq_index].virtual_address & ((1 << LOG2_PAGE_SIZE) - 1)); // translated address
             LQ.entry[lq_index].translated = COMPLETED;
 
-            RTL1[RTL1_tail] = lq_index;
-            RTL1_tail++;
-            if (RTL1_tail == LQ_SIZE)
-                RTL1_tail = 0;
+            RTL1.push_back(lq_index);
 
             DP (if (warmup_complete[cpu]) {
-            cout << "[RTL1] " << __func__ << " instr_id: " << LQ.entry[lq_index].instr_id << " rob_index: " << LQ.entry[lq_index].rob_index << " is added to RTL1";
-            cout << " head: " << RTL1_head << " tail: " << RTL1_tail << endl; }); 
+                    std::cout << "[RTL1] " << __func__ << " instr_id: " << LQ.entry[lq_index].instr_id << " rob_index: " << LQ.entry[lq_index].rob_index << " is added to RTL1" << std::endl;
+            }); 
 
             DP (if (warmup_complete[cpu]) {
             cout << "[ROB] " << __func__ << " load instr_id: " << LQ.entry[lq_index].instr_id;
@@ -1983,14 +1965,11 @@ void O3_CPU::handle_merged_translation(PACKET *provider)
             LQ.entry[merged].physical_address = (provider->data_pa << LOG2_PAGE_SIZE) | (LQ.entry[merged].virtual_address & ((1 << LOG2_PAGE_SIZE) - 1)); // translated address
             LQ.entry[merged].event_cycle = current_core_cycle[cpu];
 
-            RTL1[RTL1_tail] = merged;
-            RTL1_tail++;
-            if (RTL1_tail == LQ_SIZE)
-                RTL1_tail = 0;
+            RTL1.push_back(merged);
 
             DP (if (warmup_complete[cpu]) {
-            cout << "[RTL1] " << __func__ << " instr_id: " << LQ.entry[merged].instr_id << " rob_index: " << LQ.entry[merged].rob_index << " is added to RTL1";
-            cout << " head: " << RTL1_head << " tail: " << RTL1_tail << endl; }); 
+                    std::cout << "[RTL1] " << __func__ << " instr_id: " << LQ.entry[merged].instr_id << " rob_index: " << LQ.entry[merged].rob_index << " is added to RTL1" << std::endl;
+            }); 
 
             DP (if (warmup_complete[cpu]) {
             cout << "[ROB] " << __func__ << " load instr_id: " << LQ.entry[merged].instr_id;
