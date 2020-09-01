@@ -1210,11 +1210,7 @@ void O3_CPU::add_store_queue(uint32_t rob_index, uint32_t data_index)
     ROB.entry[rob_index].destination_added[data_index] = 1;
     
     STA.pop_front();
-
-    RTS0[RTS0_tail] = sq_index;
-    RTS0_tail++;
-    if (RTS0_tail == SQ_SIZE)
-        RTS0_tail = 0;
+    RTS0.push_back(sq_index);
 
     DP(if(warmup_complete[cpu]) {
     cout << "[SQ] " << __func__ << " instr_id: " << SQ.entry[sq_index].instr_id;
@@ -1228,8 +1224,8 @@ void O3_CPU::operate_lsq()
     uint32_t store_issued = 0, num_iteration = 0;
 
     while (store_issued < SQ_WIDTH) {
-        if (RTS0[RTS0_head] < SQ_SIZE) {
-            uint32_t sq_index = RTS0[RTS0_head];
+        if (!RTS0.empty()) {
+            uint32_t sq_index = RTS0.front();
             if (SQ.entry[sq_index].event_cycle <= current_core_cycle[cpu]) {
 
                 // add it to DTLB
@@ -1255,8 +1251,8 @@ void O3_CPU::operate_lsq()
                 data_packet.event_cycle = SQ.entry[sq_index].event_cycle;
 
                 DP (if (warmup_complete[cpu]) {
-                cout << "[RTS0] " << __func__ << " instr_id: " << SQ.entry[sq_index].instr_id << " rob_index: " << SQ.entry[sq_index].rob_index << " is popped from to RTS0";
-                cout << " head: " << RTS0_head << " tail: " << RTS0_tail << endl; }); 
+                        std::cout << "[RTS0] " << __func__ << " instr_id: " << SQ.entry[sq_index].instr_id << " rob_index: " << SQ.entry[sq_index].rob_index << " is popped from to RTS0" << endl;
+                        });
 
                 int rq_index = DTLB.add_rq(&data_packet);
 
@@ -1265,17 +1261,11 @@ void O3_CPU::operate_lsq()
                 else 
                     SQ.entry[sq_index].translated = INFLIGHT;
 
-                RTS0[RTS0_head] = SQ_SIZE;
-                RTS0_head++;
-                if (RTS0_head == SQ_SIZE)
-                    RTS0_head = 0;
-
+                RTS0.pop_front();
                 store_issued++;
             }
         }
         else {
-            //DP (if (warmup_complete[cpu]) {
-            //cout << "[RTS0] is empty head: " << RTS0_head << " tail: " << RTS0_tail << endl; });
             break;
         }
 
@@ -1286,22 +1276,17 @@ void O3_CPU::operate_lsq()
 
     num_iteration = 0;
     while (store_issued < SQ_WIDTH) {
-        if (RTS1[RTS1_head] < SQ_SIZE) {
-            uint32_t sq_index = RTS1[RTS1_head];
+        if (!RTS1.empty()) {
+            uint32_t sq_index = RTS1.front();
             if (SQ.entry[sq_index].event_cycle <= current_core_cycle[cpu]) {
                 execute_store(SQ.entry[sq_index].rob_index, sq_index, SQ.entry[sq_index].data_index);
 
-                RTS1[RTS1_head] = SQ_SIZE;
-                RTS1_head++;
-                if (RTS1_head == SQ_SIZE)
-                    RTS1_head = 0;
+                RTS1.pop_front();
 
                 store_issued++;
             }
         }
         else {
-            //DP (if (warmup_complete[cpu]) {
-            //cout << "[RTS1] is empty head: " << RTS1_head << " tail: " << RTS1_tail << endl; });
             break;
         }
 
@@ -1777,10 +1762,7 @@ void O3_CPU::complete_data_fetch(PACKET_QUEUE *queue, uint8_t is_it_tlb)
             SQ.entry[sq_index].translated = COMPLETED;
             SQ.entry[sq_index].event_cycle = current_core_cycle[cpu];
 
-            RTS1[RTS1_tail] = sq_index;
-            RTS1_tail++;
-            if (RTS1_tail == SQ_SIZE)
-                RTS1_tail = 0;
+            RTS1.push_back(sq_index);
 
             DP (if (warmup_complete[cpu]) {
             cout << "[ROB] " << __func__ << " RFO instr_id: " << SQ.entry[sq_index].instr_id;
@@ -1867,10 +1849,7 @@ void O3_CPU::handle_o3_fetch(PACKET *current_packet, uint32_t cache_type)
             SQ.entry[sq_index].physical_address = (current_packet->data_pa << LOG2_PAGE_SIZE) | (SQ.entry[sq_index].virtual_address & ((1 << LOG2_PAGE_SIZE) - 1)); // translated address
             SQ.entry[sq_index].translated = COMPLETED;
 
-            RTS1[RTS1_tail] = sq_index;
-            RTS1_tail++;
-            if (RTS1_tail == SQ_SIZE)
-                RTS1_tail = 0;
+            RTS1.push_back(sq_index);
 
             DP (if (warmup_complete[cpu]) {
             cout << "[ROB] " << __func__ << " RFO instr_id: " << SQ.entry[sq_index].instr_id;
@@ -1948,10 +1927,7 @@ void O3_CPU::handle_merged_translation(PACKET *provider)
             SQ.entry[merged].physical_address = (provider->data_pa << LOG2_PAGE_SIZE) | (SQ.entry[merged].virtual_address & ((1 << LOG2_PAGE_SIZE) - 1)); // translated address
             SQ.entry[merged].event_cycle = current_core_cycle[cpu];
 
-            RTS1[RTS1_tail] = merged;
-            RTS1_tail++;
-            if (RTS1_tail == SQ_SIZE)
-                RTS1_tail = 0;
+            RTS1.push_back(merged);
 
             DP (if (warmup_complete[cpu]) {
             cout << "[ROB] " << __func__ << " store instr_id: " << SQ.entry[merged].instr_id;

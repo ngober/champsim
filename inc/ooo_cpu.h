@@ -84,8 +84,7 @@ class O3_CPU {
     circular_buffer<uint32_t, LQ_SIZE> RTL0, RTL1;
 
     // Ready-To-Store
-    uint32_t RTS0[SQ_SIZE], RTS0_head, RTS0_tail,
-             RTS1[SQ_SIZE], RTS1_head, RTS1_tail;
+    circular_buffer<uint32_t, SQ_SIZE> RTS0, RTS1;
 
     // branch
     int branch_mispredict_stall_fetch; // flag that says that we should stall because a branch prediction was wrong
@@ -147,15 +146,6 @@ class O3_CPU {
 	  {
 	    total_branch_types[i] = 0;
 	  }
-	
-        for (uint32_t i=0; i<SQ_SIZE; i++) {
-	  RTS0[i] = SQ_SIZE;
-	  RTS1[i] = SQ_SIZE;
-        }
-        RTS0_head = 0;
-        RTS1_head = 0;
-        RTS0_tail = 0;
-        RTS1_tail = 0;
     }
 
     // functions
