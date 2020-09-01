@@ -66,17 +66,7 @@ void O3_CPU::read_from_trace()
 
                         // update STA, this structure is required to execute store instructions properly without deadlock
                         if (num_mem_ops > 0) {
-#ifdef SANITY_CHECK
-                            if (STA[STA_tail] < UINT64_MAX) {
-                                if (STA_head != STA_tail)
-                                    assert(0);
-                            }
-#endif
-                            STA[STA_tail] = instr_unique_id;
-                            STA_tail++;
-
-                            if (STA_tail == STA_SIZE)
-                                STA_tail = 0;
+                            STA.push_back(instr_unique_id);
                         }
                     }
                 }
@@ -225,17 +215,7 @@ void O3_CPU::read_from_trace()
 
                         // update STA, this structure is required to execute store instructions properly without deadlock
                         if (num_mem_ops > 0) {			  
-#ifdef SANITY_CHECK
-                            if (STA[STA_tail] < UINT64_MAX) {
-                                if (STA_head != STA_tail)
-                                    assert(0);
-                            }
-#endif
-                            STA[STA_tail] = instr_unique_id;
-                            STA_tail++;
-
-                            if (STA_tail == STA_SIZE)
-                                STA_tail = 0;
+                            STA.push_back(instr_unique_id);
                         }
                     }
                 }
@@ -995,7 +975,7 @@ uint32_t O3_CPU::check_and_add_lsq(uint32_t rob_index)
             if (ROB.entry[rob_index].destination_added[i])
                 num_added++;
             else if (SQ.occupancy < SQ.SIZE) {
-                if (STA[STA_head] == ROB.entry[rob_index].instr_id) {
+                if (STA.front() == ROB.entry[rob_index].instr_id) {
                     add_store_queue(rob_index, i);
                     num_added++;
                 }
@@ -1242,10 +1222,7 @@ void O3_CPU::add_store_queue(uint32_t rob_index, uint32_t data_index)
     // succesfully added to the store queue
     ROB.entry[rob_index].destination_added[data_index] = 1;
     
-    STA[STA_head] = UINT64_MAX;
-    STA_head++;
-    if (STA_head == STA_SIZE)
-        STA_head = 0;
+    STA.pop_front();
 
     RTS0[RTS0_tail] = sq_index;
     RTS0_tail++;

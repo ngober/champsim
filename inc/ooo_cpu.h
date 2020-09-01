@@ -75,7 +75,7 @@ class O3_CPU {
     LOAD_STORE_QUEUE LQ{"LQ", LQ_SIZE}, SQ{"SQ", SQ_SIZE};
 
     // store array, this structure is required to properly handle store instructions
-    uint64_t STA[STA_SIZE], STA_head, STA_tail; 
+    circular_buffer<uint64_t, STA_SIZE> STA;
 
     // Ready-To-Execute
     uint32_t ready_to_execute[ROB_SIZE], ready_to_execute_head, ready_to_execute_tail;
@@ -149,11 +149,6 @@ class O3_CPU {
 	    total_branch_types[i] = 0;
 	  }
 	
-        for (uint32_t i=0; i<STA_SIZE; i++)
-	  STA[i] = UINT64_MAX;
-        STA_head = 0;
-        STA_tail = 0;
-
         for (uint32_t i=0; i<ROB_SIZE; i++) {
 	  ready_to_execute[i] = ROB_SIZE;
         }
