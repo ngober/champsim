@@ -730,19 +730,14 @@ void O3_CPU::do_scheduling(uint32_t rob_index)
         if (ROB.entry[rob_index].reg_ready) {
 
 #ifdef SANITY_CHECK
-            if (ready_to_execute[ready_to_execute_tail] < ROB_SIZE)
-                assert(0);
+            assert(!ready_to_execute.full());
 #endif
             // remember this rob_index in the Ready-To-Execute array 1
-            ready_to_execute[ready_to_execute_tail] = rob_index;
+            ready_to_execute.push_back(rob_index);
 
             DP (if (warmup_complete[cpu]) {
-            cout << "[ready_to_execute] " << __func__ << " instr_id: " << ROB.entry[rob_index].instr_id << " rob_index: " << rob_index << " is added to ready_to_execute";
-            cout << " head: " << ready_to_execute_head << " tail: " << ready_to_execute_tail << endl; }); 
-
-            ready_to_execute_tail++;
-            if (ready_to_execute_tail == ROB_SIZE)
-                ready_to_execute_tail = 0;
+                    std::cout << "[ready_to_execute] " << __func__ << " instr_id: " << ROB.entry[rob_index].instr_id << " rob_index: " << rob_index << " is added to ready_to_execute"  << std::endl;
+                    });
         }
     }
 }
@@ -832,21 +827,16 @@ void O3_CPU::execute_instruction()
     uint32_t exec_issued = 0, num_iteration = 0;
     
     while (exec_issued < EXEC_WIDTH) {
-        if (ready_to_execute[ready_to_execute_head] < ROB_SIZE) {
-            uint32_t exec_index = ready_to_execute[ready_to_execute_head];
+        if (!ready_to_execute.empty()) {
+            uint32_t exec_index = ready_to_execute.front();
             if (ROB.entry[exec_index].event_cycle <= current_core_cycle[cpu]) {
                 do_execution(exec_index);
 
-                ready_to_execute[ready_to_execute_head] = ROB_SIZE;
-                ready_to_execute_head++;
-                if (ready_to_execute_head == ROB_SIZE)
-                    ready_to_execute_head = 0;
+                ready_to_execute.pop_front();
                 exec_issued++;
             }
         }
         else {
-            //DP (if (warmup_complete[cpu]) {
-            //cout << "[ready_to_execute] is empty head: " << ready_to_execute_head << " tail: " << ready_to_execute_tail << endl; });
             break;
         }
 
@@ -1585,20 +1575,14 @@ void O3_CPU::reg_RAW_release(uint32_t rob_index)
                         ROB.entry[i].scheduled = COMPLETED;
 
 #ifdef SANITY_CHECK
-                        if (ready_to_execute[ready_to_execute_tail] < ROB_SIZE)
-                            assert(0);
+                        assert(!ready_to_execute.full());
 #endif
                         // remember this rob_index in the Ready-To-Execute array 0
-                        ready_to_execute[ready_to_execute_tail] = i;
+                        ready_to_execute.push_back(i);
 
                         DP (if (warmup_complete[cpu]) {
-                        cout << "[ready_to_execute] " << __func__ << " instr_id: " << ROB.entry[i].instr_id << " rob_index: " << i << " is added to ready_to_execute";
-                        cout << " head: " << ready_to_execute_head << " tail: " << ready_to_execute_tail << endl; }); 
-
-                        ready_to_execute_tail++;
-                        if (ready_to_execute_tail == ROB_SIZE)
-                            ready_to_execute_tail = 0;
-
+                                std::cout << "[ready_to_execute] " << __func__ << " instr_id: " << ROB.entry[i].instr_id << " rob_index: " << i << " is added to ready_to_execute" << std::endl;
+                                });
                     }
                 }
 
