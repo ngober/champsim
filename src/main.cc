@@ -694,7 +694,7 @@ int main(int argc, char** argv)
         ooo_cpu[i].begin_sim_instr = warmup_instructions;
 
         // ROB
-        ooo_cpu[i].ROB.cpu = i;
+        //ooo_cpu[i].ROB.cpu = i;
 
         // BRANCH PREDICTOR
         ooo_cpu[i].initialize_branch_predictor();
@@ -834,7 +834,7 @@ int main(int argc, char** argv)
 	      ooo_cpu[i].fetch_instruction();
 	      
 	      // read from trace
-	      if ((ooo_cpu[i].IFETCH_BUFFER.occupancy < ooo_cpu[i].IFETCH_BUFFER.SIZE) && (ooo_cpu[i].fetch_stall == 0))
+	      if ((!ooo_cpu[i].IFETCH_BUFFER.full()) && (ooo_cpu[i].fetch_stall == 0))
 		{
 		  ooo_cpu[i].read_from_trace();
 		}

@@ -3,6 +3,7 @@
 
 #include <array>
 
+#include "circular_buffer.h"
 #include "cache.h"
 
 #ifdef CRC2_COMPILE
@@ -11,8 +12,6 @@
 #define STAT_PRINTING_PERIOD 10000000
 #endif
 #define DEADLOCK_CYCLE 1000000
-
-using namespace std;
 
 // CORE PROCESSOR
 #define FETCH_WIDTH 6
@@ -70,7 +69,7 @@ class O3_CPU {
     dib_t DIB;
 
     // reorder buffer, load/store queue, register file
-    CORE_BUFFER IFETCH_BUFFER{"IFETCH_BUFFER", FETCH_WIDTH*2};
+    circular_buffer<ooo_model_instr, FETCH_WIDTH*2> IFETCH_BUFFER;
     CORE_BUFFER DECODE_BUFFER{"DECODE_BUFFER", DECODE_WIDTH*3};
     CORE_BUFFER ROB{"ROB", ROB_SIZE};
     LOAD_STORE_QUEUE LQ{"LQ", LQ_SIZE}, SQ{"SQ", SQ_SIZE};
@@ -215,8 +214,6 @@ class O3_CPU {
     void retire_rob();
 
     uint32_t check_rob(uint64_t instr_id);
-
-    uint32_t add_to_ifetch_buffer(ooo_model_instr *arch_instr);
 
     uint32_t check_and_add_lsq(uint32_t rob_index);
 
