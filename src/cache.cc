@@ -259,7 +259,7 @@ void CACHE::handle_writeback()
         return;
 
     // handle the oldest entry
-    if ((WQ.entry[WQ.head].event_cycle <= current_core_cycle[writeback_cpu]) && (WQ.occupancy > 0)) {
+    if (ready_now(WQ.entry[WQ.head]) && (WQ.occupancy > 0)) {
         int index = WQ.head;
 
         // access cache
@@ -573,7 +573,7 @@ void CACHE::handle_read()
         return;
 
         // handle the oldest entry
-        if ((RQ.entry[RQ.head].event_cycle <= current_core_cycle[read_cpu]) && (RQ.occupancy > 0)) {
+        if (ready_now(RQ.entry[RQ.head]) && (RQ.occupancy > 0)) {
             int index = RQ.head;
 
             // access cache
@@ -884,7 +884,7 @@ void CACHE::handle_prefetch()
         return;
 
         // handle the oldest entry
-        if ((PQ.entry[PQ.head].event_cycle <= current_core_cycle[prefetch_cpu]) && (PQ.occupancy > 0)) {
+        if (ready_now(PQ.entry[PQ.head]) && (PQ.occupancy > 0)) {
             int index = PQ.head;
 
             // access cache
@@ -1381,7 +1381,7 @@ int CACHE::add_rq(PACKET *packet)
     RQ.entry[index] = *packet;
 
     // ADD LATENCY
-    if (RQ.entry[index].event_cycle < current_core_cycle[packet->cpu])
+    if (ready_now(RQ.entry[index]))
         RQ.entry[index].event_cycle = current_core_cycle[packet->cpu] + LATENCY;
     else
         RQ.entry[index].event_cycle += LATENCY;
@@ -1434,7 +1434,7 @@ int CACHE::add_wq(PACKET *packet)
     WQ.entry[index] = *packet;
 
     // ADD LATENCY
-    if (WQ.entry[index].event_cycle < current_core_cycle[packet->cpu])
+    if (ready_now(WQ.entry[index]))
         WQ.entry[index].event_cycle = current_core_cycle[packet->cpu] + LATENCY;
     else
         WQ.entry[index].event_cycle += LATENCY;
@@ -1622,7 +1622,7 @@ void CACHE::va_translate_prefetches()
   vapq_index = VAPQ.head;
   for(uint32_t i=0; i<VAPQ.SIZE; i++)
     {
-      if((VAPQ.entry[vapq_index].address == VAPQ.entry[vapq_index].v_address) && (VAPQ.entry[vapq_index].event_cycle <= current_core_cycle[cpu]))
+      if((VAPQ.entry[vapq_index].address == VAPQ.entry[vapq_index].v_address) && ready_now(VAPQ.entry[vapq_index]))
         {
 	  VAPQ.entry[vapq_index].full_addr = vmem.va_to_pa(cpu, VAPQ.entry[vapq_index].full_v_addr);
 	  VAPQ.entry[vapq_index].address = (VAPQ.entry[vapq_index].full_addr)>>LOG2_BLOCK_SIZE;
@@ -1746,7 +1746,7 @@ int CACHE::add_pq(PACKET *packet)
     PQ.entry[index] = *packet;
 
     // ADD LATENCY
-    if (PQ.entry[index].event_cycle < current_core_cycle[packet->cpu])
+    if (ready_now(PQ.entry[index]))
         PQ.entry[index].event_cycle = current_core_cycle[packet->cpu] + LATENCY;
     else
         PQ.entry[index].event_cycle += LATENCY;
@@ -1793,7 +1793,7 @@ void CACHE::return_data(PACKET *packet)
     MSHR.entry[mshr_index].pf_metadata = packet->pf_metadata;
 
     // ADD LATENCY
-    if (MSHR.entry[mshr_index].event_cycle < current_core_cycle[packet->cpu])
+    if (ready_now(MSHR.entry[mshr_index]))
         MSHR.entry[mshr_index].event_cycle = current_core_cycle[packet->cpu] + LATENCY;
     else
         MSHR.entry[mshr_index].event_cycle += LATENCY;

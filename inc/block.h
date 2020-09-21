@@ -340,6 +340,8 @@ class LSQ_ENTRY {
 
     uint32_t rob_index, data_index, sq_index;
 
+    uint8_t cpu = NUM_CPUS;
+
     uint8_t translated,
             fetched,
             asid[2];
@@ -394,4 +396,11 @@ class LOAD_STORE_QUEUE {
         delete[] entry;
     };
 };
+
+template <typename T>
+bool ready_now(T elem)
+{
+    return elem.event_cycle < current_core_cycle[elem.cpu];
+}
+
 #endif

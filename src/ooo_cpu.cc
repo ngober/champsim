@@ -473,7 +473,7 @@ void O3_CPU::decode_and_dispatch()
     // dispatch DECODE_WIDTH instructions that have decoded into the ROB
     uint32_t count_dispatches = 0;
     while (count_dispatches < DECODE_WIDTH && DECODE_BUFFER.occupancy > 0 && ROB.occupancy < ROB.SIZE &&
-            (!warmup_complete[cpu] || ((DECODE_BUFFER.entry[DECODE_BUFFER.head].decoded) && (DECODE_BUFFER.entry[DECODE_BUFFER.head].event_cycle < current_core_cycle[cpu]))))
+            (!warmup_complete[cpu] || ((DECODE_BUFFER.entry[DECODE_BUFFER.head].decoded) && ready_now(DECODE_BUFFER.entry[DECODE_BUFFER.head]))))
     {
         // Add to ROB
         ROB.entry[ROB.tail] = DECODE_BUFFER.entry[DECODE_BUFFER.head];
@@ -620,7 +620,7 @@ void O3_CPU::do_scheduling(uint32_t rob_index)
         ROB.entry[rob_index].scheduled = COMPLETED;
 
         // ADD LATENCY
-        if (ROB.entry[rob_index].event_cycle < current_core_cycle[cpu])
+        if (ready_now(ROB.entry[rob_index]))
             ROB.entry[rob_index].event_cycle = current_core_cycle[cpu] + SCHEDULING_LATENCY;
         else
             ROB.entry[rob_index].event_cycle += SCHEDULING_LATENCY;
@@ -732,7 +732,8 @@ void O3_CPU::execute_instruction()
     while (exec_issued < EXEC_WIDTH) {
         if (ready_to_execute[ready_to_execute_head] < ROB_SIZE) {
             uint32_t exec_index = ready_to_execute[ready_to_execute_head];
-            if (ROB.entry[exec_index].event_cycle <= current_core_cycle[cpu]) {
+            if (ready_now(ROB.entry[exec_index]))
+            {
                 do_execution(exec_index);
 
                 ready_to_execute[ready_to_execute_head] = ROB_SIZE;
@@ -756,14 +757,15 @@ void O3_CPU::execute_instruction()
 
 void O3_CPU::do_execution(uint32_t rob_index)
 {
-    //if (ROB.entry[rob_index].reg_ready && (ROB.entry[rob_index].scheduled == COMPLETED) && (ROB.entry[rob_index].event_cycle <= current_core_cycle[cpu])) {
+    //if (ROB.entry[rob_index].reg_ready && (ROB.entry[rob_index].scheduled == COMPLETED) && (ready_now(ROB.entry[rob_index])))
+    //{
 
   //cout << "do_execution() rob_index: " << rob_index << " cycle: " << current_core_cycle[cpu] << endl;
   
         ROB.entry[rob_index].executed = INFLIGHT;
 
         // ADD LATENCY
-        if (ROB.entry[rob_index].event_cycle < current_core_cycle[cpu])
+        if (ready_now(ROB.entry[rob_index]))
             ROB.entry[rob_index].event_cycle = current_core_cycle[cpu] + EXEC_LATENCY;
         else
             ROB.entry[rob_index].event_cycle += EXEC_LATENCY;
@@ -919,6 +921,7 @@ void O3_CPU::add_load_queue(uint32_t rob_index, uint32_t data_index)
 
     // add it to the load queue
     ROB.entry[rob_index].lq_index[data_index] = lq_index;
+    LQ.entry[lq_index].cpu = cpu;
     LQ.entry[lq_index].instr_id = ROB.entry[rob_index].instr_id;
     LQ.entry[lq_index].virtual_address = ROB.entry[rob_index].source_memory[data_index];
     LQ.entry[lq_index].ip = ROB.entry[rob_index].ip;
@@ -1007,7 +1010,8 @@ void O3_CPU::add_load_queue(uint32_t rob_index, uint32_t data_index)
 
     if (forwarding_index != SQ.SIZE) { // we have a store-to-load forwarding
 
-        if ((SQ.entry[forwarding_index].fetched == COMPLETED) && (SQ.entry[forwarding_index].event_cycle <= current_core_cycle[cpu])) {
+        if ((SQ.entry[forwarding_index].fetched == COMPLETED) && (ready_now(SQ.entry[forwarding_index])))
+        {
             LQ.entry[lq_index].physical_address = (SQ.entry[forwarding_index].physical_address & ~(uint64_t) ((1 << LOG2_BLOCK_SIZE) - 1)) | (LQ.entry[lq_index].virtual_address & ((1 << LOG2_BLOCK_SIZE) - 1));
             LQ.entry[lq_index].translated = COMPLETED;
             LQ.entry[lq_index].fetched = COMPLETED;
@@ -1103,6 +1107,7 @@ void O3_CPU::add_store_queue(uint32_t rob_index, uint32_t data_index)
 
     // add it to the store queue
     ROB.entry[rob_index].sq_index[data_index] = sq_index;
+    SQ.entry[sq_index].cpu = cpu;
     SQ.entry[sq_index].instr_id = ROB.entry[rob_index].instr_id;
     SQ.entry[sq_index].virtual_address = ROB.entry[rob_index].destination_memory[data_index];
     SQ.entry[sq_index].ip = ROB.entry[rob_index].ip;
@@ -1144,8 +1149,8 @@ void O3_CPU::operate_lsq()
     while (store_issued < SQ_WIDTH) {
         if (RTS0[RTS0_head] < SQ_SIZE) {
             uint32_t sq_index = RTS0[RTS0_head];
-            if (SQ.entry[sq_index].event_cycle <= current_core_cycle[cpu]) {
-
+            if (ready_now(SQ.entry[sq_index]))
+            {
                 // add it to DTLB
                 PACKET data_packet;
 
@@ -1202,7 +1207,8 @@ void O3_CPU::operate_lsq()
     while (store_issued < SQ_WIDTH) {
         if (RTS1[RTS1_head] < SQ_SIZE) {
             uint32_t sq_index = RTS1[RTS1_head];
-            if (SQ.entry[sq_index].event_cycle <= current_core_cycle[cpu]) {
+            if (ready_now(SQ.entry[sq_index]))
+            {
                 execute_store(SQ.entry[sq_index].rob_index, sq_index, SQ.entry[sq_index].data_index);
 
                 RTS1[RTS1_head] = SQ_SIZE;
@@ -1229,8 +1235,8 @@ void O3_CPU::operate_lsq()
     while (load_issued < LQ_WIDTH) {
         if (RTL0[RTL0_head] < LQ_SIZE) {
             uint32_t lq_index = RTL0[RTL0_head];
-            if (LQ.entry[lq_index].event_cycle <= current_core_cycle[cpu]) {
-
+            if (ready_now(LQ.entry[lq_index]))
+            {
                 // add it to DTLB
                 PACKET data_packet;
                 data_packet.fill_level = FILL_L1;
@@ -1285,7 +1291,8 @@ void O3_CPU::operate_lsq()
     while (load_issued < LQ_WIDTH) {
         if (RTL1[RTL1_head] < LQ_SIZE) {
             uint32_t lq_index = RTL1[RTL1_head];
-            if (LQ.entry[lq_index].event_cycle <= current_core_cycle[cpu]) {
+            if (ready_now(LQ.entry[lq_index]))
+            {
                 int rq_index = execute_load(LQ.entry[lq_index].rob_index, lq_index, LQ.entry[lq_index].data_index);
 
                 if (rq_index != -2) {
@@ -1418,8 +1425,8 @@ int O3_CPU::execute_load(uint32_t rob_index, uint32_t lq_index, uint32_t data_in
 uint32_t O3_CPU::complete_execution(uint32_t rob_index)
 {
     if (ROB.entry[rob_index].is_memory == 0) {
-        if ((ROB.entry[rob_index].executed == INFLIGHT) && (ROB.entry[rob_index].event_cycle <= current_core_cycle[cpu])) {
-
+        if ((ROB.entry[rob_index].executed == INFLIGHT) && ready_now(ROB.entry[rob_index]))
+        {
             ROB.entry[rob_index].executed = COMPLETED; 
             inflight_reg_executions--;
             completed_executions++;
@@ -1442,8 +1449,8 @@ uint32_t O3_CPU::complete_execution(uint32_t rob_index)
     }
     else {
         if (ROB.entry[rob_index].num_mem_ops == 0) {
-            if ((ROB.entry[rob_index].executed == INFLIGHT) && (ROB.entry[rob_index].event_cycle <= current_core_cycle[cpu])) {
-
+            if ((ROB.entry[rob_index].executed == INFLIGHT) && ready_now(ROB.entry[rob_index]))
+            {
 	      ROB.entry[rob_index].executed = COMPLETED;
                 inflight_mem_executions--;
                 completed_executions++;
@@ -1526,16 +1533,16 @@ void O3_CPU::operate_cache()
 
 void O3_CPU::update_rob()
 {
-    if (ITLB.PROCESSED.occupancy && (ITLB.PROCESSED.entry[ITLB.PROCESSED.head].event_cycle <= current_core_cycle[cpu]))
+    if (ITLB.PROCESSED.occupancy && ready_now(ITLB.PROCESSED.entry[ITLB.PROCESSED.head]))
         complete_instr_fetch(&ITLB.PROCESSED, 1);
 
-    if (L1I.PROCESSED.occupancy && (L1I.PROCESSED.entry[L1I.PROCESSED.head].event_cycle <= current_core_cycle[cpu]))
+    if (L1I.PROCESSED.occupancy && ready_now(L1I.PROCESSED.entry[L1I.PROCESSED.head]))
         complete_instr_fetch(&L1I.PROCESSED, 0);
 
-    if (DTLB.PROCESSED.occupancy && (DTLB.PROCESSED.entry[DTLB.PROCESSED.head].event_cycle <= current_core_cycle[cpu]))
+    if (DTLB.PROCESSED.occupancy && ready_now(DTLB.PROCESSED.entry[DTLB.PROCESSED.head]))
         complete_data_fetch(&DTLB.PROCESSED, 1);
 
-    if (L1D.PROCESSED.occupancy && (L1D.PROCESSED.entry[L1D.PROCESSED.head].event_cycle <= current_core_cycle[cpu]))
+    if (L1D.PROCESSED.occupancy && ready_now(L1D.PROCESSED.entry[L1D.PROCESSED.head]))
         complete_data_fetch(&L1D.PROCESSED, 0);
 
     // update ROB entries with completed executions

@@ -128,6 +128,7 @@ class ooo_model_instr {
             asid[2] = {},
             reg_RAW_checked[NUM_INSTR_SOURCES] = {};
 
+    uint8_t cpu = 0;
     uint8_t branch_type = NOT_BRANCH;
     uint64_t branch_target = 0;
 
@@ -183,6 +184,7 @@ class ooo_model_instr {
         std::copy(std::begin(instr.source_registers), std::end(instr.source_registers), std::begin(this->source_registers));
         std::copy(std::begin(instr.source_memory), std::end(instr.source_memory), std::begin(this->source_memory));
 
+        this->cpu = cpu;
         this->ip = instr.ip;
         this->is_branch = instr.is_branch;
         this->branch_taken = instr.branch_taken;
@@ -198,6 +200,7 @@ class ooo_model_instr {
         std::copy(std::begin(instr.source_registers), std::end(instr.source_registers), std::begin(this->source_registers));
         std::copy(std::begin(instr.source_memory), std::end(instr.source_memory), std::begin(this->source_memory));
 
+        this->cpu = cpu;
         this->ip = instr.ip;
         this->is_branch = instr.is_branch;
         this->branch_taken = instr.branch_taken;
