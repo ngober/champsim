@@ -174,6 +174,7 @@ class CACHE : public MEMORY {
          add_pq(PACKET *packet);
 
     void return_data(PACKET *packet),
+         return_translation(PACKET *packet),
          operate(),
          increment_WQ_FULL(uint64_t address);
 

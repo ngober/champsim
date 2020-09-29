@@ -112,7 +112,7 @@ class O3_CPU {
   // trace cache for previously decoded instructions
   
     // constructor
-    O3_CPU() : page_walker(0x400) {
+    O3_CPU() {
         cpu = 0;
 
         // trace
