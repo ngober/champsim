@@ -52,13 +52,13 @@ class circular_buffer_iterator
  * This class implements a deque-like interface with fixed (maximum) size over contiguous memory.
  * Iterators to this structure are never invalidated, unless the element it refers to is popped.
  */
-template<typename T, std::size_t N>
+template<typename T>
 class circular_buffer
 {
     private:
         // N+1 elements are used to avoid the aliasing of the full and the empty cases.
-        using buffer_t = std::array<T,N+1>;
-        using self_type = circular_buffer<T,N>;
+        using buffer_t = std::vector<T>;
+        using self_type = circular_buffer<T>;
 
     public:
         using value_type             = typename buffer_t::value_type;
@@ -88,7 +88,10 @@ class circular_buffer
         const_reference operator[](size_type n) const { return entry_[n]; }
 
     public:
-        constexpr size_type size() const noexcept     { return N; }
+        explicit circular_buffer(std::size_t N) : entry_(N+1) {}
+        circular_buffer(std::size_t N, value_type t) : entry(N, t) {}
+
+        constexpr size_type size() const noexcept     { return entry_.size() - 1; }
         size_type occupancy() const noexcept          { return occupancy_; };
         bool empty() const noexcept                   { return occupancy() == 0; }
         bool full()  const noexcept                   { return occupancy() == size(); }
