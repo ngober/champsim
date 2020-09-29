@@ -1,9 +1,12 @@
 #define _BSD_SOURCE
 
-#include <getopt.h>
 #include "ooo_cpu.h"
 #include "uncore.h"
+#include "tracereader.h"
+
+#include <getopt.h>
 #include <fstream>
+#include <vector>
 
 uint8_t warmup_complete[NUM_CPUS], 
         simulation_complete[NUM_CPUS], 
@@ -19,8 +22,12 @@ uint64_t warmup_instructions     = 1000000,
 
 time_t start_time;
 
+VirtualMemory vmem(NUM_CPUS, 8589934592, 4096, 5, 1);
+
 // PAGE TABLE
 uint64_t minor_fault[NUM_CPUS], major_fault[NUM_CPUS];
+
+std::vector<tracereader*> traces;
 
 void record_roi_stats(uint32_t cpu, CACHE *cache)
 {
@@ -146,6 +153,13 @@ void reset_cache_stats(uint32_t cpu, CACHE *cache)
         cache->sim_hit[cpu][i] = 0;
         cache->sim_miss[cpu][i] = 0;
     }
+
+    cache->pf_requested = 0;
+    cache->pf_issued = 0;
+    cache->pf_useful = 0;
+    cache->pf_useless = 0;
+    cache->pf_fill = 0;
+
 
     cache->total_miss_latency = 0;
 
@@ -369,55 +383,14 @@ int main(int argc, char** argv)
     // end consequence of knobs
 
     // search through the argv for "-traces"
-    std::size_t found_traces = 0;
-    std::size_t count_traces = 0;
-    cout << endl;
+    int found_traces = 0;
+    std::cout << std::endl;
     for (int i=0; i<argc; i++) {
         if (found_traces)
         {
-            std::cout << "CPU " << count_traces << " runs " << argv[i] << std::endl;
+            std::cout << "CPU " << traces.size() << " runs " << argv[i] << std::endl;
 
-            sprintf(ooo_cpu[count_traces].trace_string, "%s", argv[i]);
-
-            std::string full_name(argv[i]);
-            std::string last_dot = full_name.substr(full_name.find_last_of("."));
-
-            std::string fmtstr;
-            std::string decomp_program;
-            if (full_name.substr(0,4) == "http")
-            {
-                // Check file exists
-                char testfile_command[4096];
-                sprintf(testfile_command, "wget -q --spider %s", argv[i]);
-                FILE *testfile = popen(testfile_command, "r");
-                if (pclose(testfile))
-                {
-                    std::cerr << "TRACE FILE NOT FOUND" << std::endl;
-                    assert(0);
-                }
-                fmtstr = "wget -qO- %2$s | %1$s -dc";
-            }
-            else
-            {
-                std::ifstream testfile(argv[i]);
-                if (!testfile.good())
-                {
-                    std::cerr << "TRACE FILE NOT FOUND" << std::endl;
-                    assert(0);
-                }
-                fmtstr = "%1$s -dc %2$s";
-            }
-
-            if (last_dot[1] == 'g') // gzip format
-                decomp_program = "gzip";
-            else if (last_dot[1] == 'x') // xz
-                decomp_program = "xz";
-            else {
-                std::cout << "ChampSim does not support traces other than gz or xz compression!" << std::endl;
-                assert(0);
-            }
-
-            sprintf(ooo_cpu[count_traces].gunzip_command, fmtstr.c_str(), decomp_program.c_str(), argv[i]);
+            traces.push_back(get_tracereader(argv[i], i, knob_cloudsuite));
 
             char *pch[100];
             int count_str = 0;
@@ -438,14 +411,7 @@ int main(int argc, char** argv)
                 j++;
             }
 
-            ooo_cpu[count_traces].trace_file = popen(ooo_cpu[count_traces].gunzip_command, "r");
-            if (ooo_cpu[count_traces].trace_file == NULL) {
-                printf("\n*** Trace file not found: %s ***\n\n", argv[i]);
-                assert(0);
-            }
-
-            count_traces++;
-            if (count_traces > NUM_CPUS) {
+            if (traces.size() > NUM_CPUS) {
                 printf("\n*** Too many traces for the configured number of cores ***\n\n");
                 assert(0);
             }
@@ -455,7 +421,7 @@ int main(int argc, char** argv)
         }
     }
 
-    if (count_traces != NUM_CPUS) {
+    if (traces.size() != NUM_CPUS) {
         printf("\n*** Not enough traces for the configured number of cores ***\n\n");
         assert(0);
     }
@@ -482,14 +448,15 @@ int main(int argc, char** argv)
         ooo_cpu[i].ITLB.cpu = i;
         ooo_cpu[i].ITLB.cache_type = IS_ITLB;
 	ooo_cpu[i].ITLB.MAX_READ = 2;
+	ooo_cpu[i].ITLB.MAX_WRITE = 2;
         ooo_cpu[i].ITLB.fill_level = FILL_L1;
         ooo_cpu[i].ITLB.extra_interface = &ooo_cpu[i].L1I;
         ooo_cpu[i].ITLB.lower_level = &ooo_cpu[i].STLB; 
 
         ooo_cpu[i].DTLB.cpu = i;
         ooo_cpu[i].DTLB.cache_type = IS_DTLB;
-        //ooo_cpu[i].DTLB.MAX_READ = (2 > MAX_READ_PER_CYCLE) ? MAX_READ_PER_CYCLE : 2;
         ooo_cpu[i].DTLB.MAX_READ = 2;
+        ooo_cpu[i].DTLB.MAX_WRITE = 2;
         ooo_cpu[i].DTLB.fill_level = FILL_L1;
         ooo_cpu[i].DTLB.extra_interface = &ooo_cpu[i].L1D;
         ooo_cpu[i].DTLB.lower_level = &ooo_cpu[i].STLB;
@@ -497,6 +464,7 @@ int main(int argc, char** argv)
         ooo_cpu[i].STLB.cpu = i;
         ooo_cpu[i].STLB.cache_type = IS_STLB;
         ooo_cpu[i].STLB.MAX_READ = 1;
+        ooo_cpu[i].STLB.MAX_WRITE = 1;
         ooo_cpu[i].STLB.fill_level = FILL_L2;
         ooo_cpu[i].STLB.upper_level_icache[i] = &ooo_cpu[i].ITLB;
         ooo_cpu[i].STLB.upper_level_dcache[i] = &ooo_cpu[i].DTLB;
@@ -509,8 +477,8 @@ int main(int argc, char** argv)
         // PRIVATE CACHE
         ooo_cpu[i].L1I.cpu = i;
         ooo_cpu[i].L1I.cache_type = IS_L1I;
-        //ooo_cpu[i].L1I.MAX_READ = (FETCH_WIDTH > MAX_READ_PER_CYCLE) ? MAX_READ_PER_CYCLE : FETCH_WIDTH;
         ooo_cpu[i].L1I.MAX_READ = 2;
+        ooo_cpu[i].L1I.MAX_WRITE = 2;
         ooo_cpu[i].L1I.fill_level = FILL_L1;
         ooo_cpu[i].L1I.lower_level = &ooo_cpu[i].L2C; 
         ooo_cpu[i].l1i_prefetcher_initialize();
@@ -519,13 +487,16 @@ int main(int argc, char** argv)
 
         ooo_cpu[i].L1D.cpu = i;
         ooo_cpu[i].L1D.cache_type = IS_L1D;
-        ooo_cpu[i].L1D.MAX_READ = (2 > MAX_READ_PER_CYCLE) ? MAX_READ_PER_CYCLE : 2;
+        ooo_cpu[i].L1D.MAX_READ = 2;
+        ooo_cpu[i].L1D.MAX_WRITE = 2;
         ooo_cpu[i].L1D.fill_level = FILL_L1;
         ooo_cpu[i].L1D.lower_level = &ooo_cpu[i].L2C; 
         ooo_cpu[i].L1D.l1d_prefetcher_initialize();
 
         ooo_cpu[i].L2C.cpu = i;
         ooo_cpu[i].L2C.cache_type = IS_L2C;
+        ooo_cpu[i].L2C.MAX_READ = 1;
+        ooo_cpu[i].L2C.MAX_WRITE = 1;
         ooo_cpu[i].L2C.fill_level = FILL_L2;
         ooo_cpu[i].L2C.upper_level_icache[i] = &ooo_cpu[i].L1I;
         ooo_cpu[i].L2C.upper_level_dcache[i] = &ooo_cpu[i].L1D;
@@ -536,6 +507,7 @@ int main(int argc, char** argv)
         uncore.LLC.cache_type = IS_LLC;
         uncore.LLC.fill_level = FILL_LLC;
         uncore.LLC.MAX_READ = NUM_CPUS;
+        uncore.LLC.MAX_WRITE = NUM_CPUS;
         uncore.LLC.upper_level_icache[i] = &ooo_cpu[i].L2C;
         uncore.LLC.upper_level_dcache[i] = &ooo_cpu[i].L2C;
         uncore.LLC.lower_level = &uncore.DRAM;
@@ -612,11 +584,11 @@ int main(int argc, char** argv)
 	      // fetch
 	      ooo_cpu[i].fetch_instruction();
 	      
-	      // read from trace
-	      if ((ooo_cpu[i].IFETCH_BUFFER.occupancy < ooo_cpu[i].IFETCH_BUFFER.SIZE) && (ooo_cpu[i].fetch_stall == 0))
-		{
-		  ooo_cpu[i].read_from_trace();
-		}
+                // read from trace
+                if ((ooo_cpu[i].IFETCH_BUFFER.occupancy < ooo_cpu[i].IFETCH_BUFFER.SIZE) && (ooo_cpu[i].fetch_stall == 0))
+                {
+                    while(ooo_cpu[i].init_instruction(traces[i]->get()));
+                }
 	    }
 
             // heartbeat information
