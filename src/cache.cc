@@ -224,6 +224,9 @@ void CACHE::readlike_hit(std::size_t set, std::size_t way, PACKET &handle_pkt)
         hit_block.prefetch = 0;
     }
     hit_block.used = 1;
+
+    if (exclusive && fill_level != FILL_L1 && !handle_pkt.to_return.empty())
+        hit_block.valid = false;
 }
 
 bool CACHE::readlike_miss(PACKET &handle_pkt)
@@ -375,7 +378,7 @@ bool CACHE::filllike_miss(std::size_t set, std::size_t way, PACKET &handle_pkt)
         fill_block = handle_pkt; // fill cache
         fill_block.lru = lru;
 
-        if (handle_pkt.type == WRITEBACK || (handle_pkt.type == RFO && cache_type == IS_L1D))
+        if (exclusive || handle_pkt.type == WRITEBACK || (handle_pkt.type == RFO && cache_type == IS_L1D))
             fill_block.dirty = 1;
     }
 
@@ -665,7 +668,6 @@ int CACHE::va_prefetch_line(uint64_t ip, uint64_t pf_addr, int pf_fill_level, ui
       pf_packet.ip = ip;
       pf_packet.type = PREFETCH;
       pf_packet.event_cycle = 0;
-      pf_packet.to_return = {this};
 
       int vapq_index = VAPQ.check_queue(&pf_packet);
       if(vapq_index != -1)
