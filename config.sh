@@ -152,6 +152,16 @@ for i,cpu in enumerate(config_file['ooo_cpu']):
     for cache_name, ll in zip(cache_names, default_lower_levels):
         if 'lower_level' not in config_file['cache'][cpu[cache_name]]:
             config_file['cache'][cpu[cache_name]]['lower_level'] = ll
+for cache in config_file['cache'].values():
+    if 'lower_level' not in cache:
+        cache['lower_level'] = None
+
+# Remove caches that are inaccessible
+accessible = [False]*len(config_file['cache'])
+for i,ll in enumerate(config_file['cache'].values()):
+    accessible[i] |= any(ul['lower_level'] == ll['name'] for ul in config_file['cache'].values())
+    accessible[i] |= any(ll['name'] in [cpu['L1I'], cpu['L1D'], cpu['ITLB'], cpu['DTLB']] for cpu in config_file['ooo_cpu'])
+config_file['cache'] = dict(itertools.compress(config_file['cache'].items(), accessible))
 
 # Establish latencies in caches
 # If not specified, hit and fill latencies are half of the total latency, where fill takes longer if the sum is odd.
@@ -227,19 +237,20 @@ def level_cmp(cache_a, cache_b):
 
 config_file['cache'].sort(key=functools.cmp_to_key(level_cmp), reverse=True)
 
+# Check for lower levels in the array
+for i in reversed(range(len(config_file['cache']))):
+    ul = config_file['cache'][i]
+    if ul['lower_level'] != 'DRAM' and ul['lower_level'] is not None:
+        if not any((ul['lower_level'] == ll['name']) for ll in config_file['cache'][:i]):
+            print('Could not find cache "' + ul['lower_level'] + '" in cache array. Exiting...')
+            sys.exit(1)
+
 # prune Nones
 for cache in config_file['cache']:
     if cache['lower_level'] is not None:
         cache['lower_level'] = '&'+cache['lower_level'] # append address operator for C++
     else:
         cache['lower_level'] = 'NULL'
-
-# one final check before file writing
-for cpu in config_file['ooo_cpu']:
-    for cache_name in cache_names:
-        if not any((cpu[cache_name] == cache['name']) for cache in config_file['cache']):
-            print('Could not find cache "' + cpu[cache_name] + '" in cache array. Exiting...')
-            sys.exit(1)
 
 ###
 # Begin file writing
