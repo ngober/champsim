@@ -430,6 +430,11 @@ int main(int argc, char** argv)
     LLC.fill_level = FILL_LLC;
     LLC.llc_prefetcher_initialize();
 
+    for (O3_CPU* cpu : ooo_cpu)
+    {
+        cpu->initialize_core();
+    }
+
     for (CACHE* cache : caches)
     {
         cache->impl_replacement_initialize();
