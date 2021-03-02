@@ -50,7 +50,7 @@ void CACHE::handle_fill()
 
         // find victim
         uint32_t set = get_set(fill_mshr->address);
-        uint32_t way = find_victim(fill_mshr->cpu, fill_mshr->instr_id, set, &block.data()[set*NUM_WAY], fill_mshr->ip, fill_mshr->full_addr, fill_mshr->type);
+        uint32_t way = impl_find_victim(fill_mshr->cpu, fill_mshr->instr_id, set, &block.data()[set*NUM_WAY], fill_mshr->ip, fill_mshr->full_addr, fill_mshr->type);
 
         bool success = filllike_miss(set, way, *fill_mshr);
         if (!success)
@@ -91,7 +91,7 @@ void CACHE::handle_writeback()
 
         if (way < NUM_WAY) // HIT
         {
-            update_replacement_state(handle_pkt.cpu, set, way, fill_block.full_addr, handle_pkt.ip, 0, handle_pkt.type, 1);
+            impl_update_replacement_state(handle_pkt.cpu, set, way, fill_block.full_addr, handle_pkt.ip, 0, handle_pkt.type, 1);
 
             // COLLECT STATS
             sim_hit[handle_pkt.cpu][handle_pkt.type]++;
@@ -114,7 +114,7 @@ void CACHE::handle_writeback()
             }
             else {
                 // find victim
-                way = find_victim(handle_pkt.cpu, handle_pkt.instr_id, set, &block.data()[set*NUM_WAY], handle_pkt.ip, handle_pkt.full_addr, handle_pkt.type);
+                way = impl_find_victim(handle_pkt.cpu, handle_pkt.instr_id, set, &block.data()[set*NUM_WAY], handle_pkt.ip, handle_pkt.full_addr, handle_pkt.type);
 
                 success = filllike_miss(set, way, handle_pkt);
             }
@@ -211,7 +211,7 @@ void CACHE::readlike_hit(std::size_t set, std::size_t way, PACKET &handle_pkt)
     }
 
     // update replacement policy
-    update_replacement_state(handle_pkt.cpu, set, way, hit_block.full_addr, handle_pkt.ip, 0, handle_pkt.type, 1);
+    impl_update_replacement_state(handle_pkt.cpu, set, way, hit_block.full_addr, handle_pkt.ip, 0, handle_pkt.type, 1);
 
     // COLLECT STATS
     sim_hit[handle_pkt.cpu][handle_pkt.type]++;
@@ -410,7 +410,7 @@ bool CACHE::filllike_miss(std::size_t set, std::size_t way, PACKET &handle_pkt)
     }
 
     // update replacement policy
-    update_replacement_state(handle_pkt.cpu, set, way, handle_pkt.full_addr, handle_pkt.ip, 0, handle_pkt.type, 0);
+    impl_update_replacement_state(handle_pkt.cpu, set, way, handle_pkt.full_addr, handle_pkt.ip, 0, handle_pkt.type, 0);
 
     // COLLECT STATS
     sim_miss[handle_pkt.cpu][handle_pkt.type]++;

@@ -16,14 +16,14 @@ config_cache_name = '.champsimconfig_cache'
 
 dcn_fmtstr = 'cpu{}_{}' # default cache name format string
 
-cache_fmtstr = 'CACHE {name}("{name}", {frequency}, {sets}, {ways}, {wq_size}, {rq_size}, {pq_size}, {mshr_size}, {hit_latency}, {fill_latency}, {max_read}, {max_write}, {prefetch_as_load:b}, {lower_level});\n'
+cache_fmtstr = 'CACHE {name}("{name}", {frequency}, {sets}, {ways}, {wq_size}, {rq_size}, {pq_size}, {mshr_size}, {hit_latency}, {fill_latency}, {max_read}, {max_write}, {prefetch_as_load:b}, {lower_level}, &CACHE::{replacement_initialize}, &CACHE::{replacement_find_victim}, &CACHE::{replacement_update_replacement_state}, &CACHE::{replacement_replacement_final_stats});\n'
 
 cpu_fmtstr = 'O3_CPU cpu{cpu}_inst({cpu}, {attrs[frequency]}, {attrs[DIB][sets]}, {attrs[DIB][ways]}, {attrs[DIB][window_size]}, {attrs[ifetch_buffer_size]}, {attrs[dispatch_buffer_size]}, {attrs[decode_buffer_size]}, {attrs[rob_size]}, {attrs[lq_size]}, {attrs[sq_size]}, {attrs[fetch_width]}, {attrs[decode_width]}, {attrs[dispatch_width]}, {attrs[scheduler_size]}, {attrs[execute_width]}, {attrs[lq_width]}, {attrs[sq_width]}, {attrs[retire_width]}, {attrs[mispredict_penalty]}, {attrs[decode_latency]}, {attrs[dispatch_latency]}, {attrs[schedule_latency]}, {attrs[execute_latency]}, &{attrs[ITLB]}, &{attrs[DTLB]}, &{attrs[L1I]}, &{attrs[L1D]});\n'
 
 pmem_fmtstr = 'MEMORY_CONTROLLER DRAM("DRAM", {attrs[frequency]});\n'
 vmem_fmtstr = 'VirtualMemory vmem(NUM_CPUS, {attrs[size]}, PAGE_SIZE, {attrs[num_levels]}, 1);\n'
 
-module_make_fmtstr = '{1}/%.o: CFLAGS += -I{1}\n{1}/%.o: CXXFLAGS += -I{1}\nobj/{0}: $(patsubst %.cc,%.o,$(wildcard {1}/*.cc)) $(patsubst %.c,%.o,$(wildcard {1}/*.c))\n\t@mkdir -p $(dir $@)\n\tar -rcs $@ $^\n\n'
+module_make_fmtstr = '{1}/%.o: CFLAGS += -I{1}\n{1}/%.o: CXXFLAGS += -I{1}\n{1}/%.o: CXXFLAGS += {2}\nobj/{0}: $(patsubst %.cc,%.o,$(wildcard {1}/*.cc)) $(patsubst %.c,%.o,$(wildcard {1}/*.c))\n\t@mkdir -p $(dir $@)\n\tar -rcs $@ $^\n\n'
 
 define_fmtstr = '#define {{names[{name}]}} {{config[{name}]}}u\n'
 define_nonint_fmtstr = '#define {{names[{name}]}} {{config[{name}]}}\n'
@@ -71,13 +71,13 @@ else:
 
 default_core = { 'frequency' : 4000, 'ifetch_buffer_size': 64, 'decode_buffer_size': 32, 'dispatch_buffer_size': 32, 'rob_size': 352, 'lq_size': 128, 'sq_size': 72, 'fetch_width' : 6, 'decode_width' : 6, 'dispatch_width' : 6, 'execute_width' : 4, 'lq_width' : 2, 'sq_width' : 2, 'retire_width' : 5, 'mispredict_penalty' : 1, 'scheduler_size' : 128, 'decode_latency' : 1, 'dispatch_latency' : 1, 'schedule_latency' : 0, 'execute_latency' : 0, 'branch_predictor': 'bimodal', 'btb': 'basic_btb' }
 default_dib  = { 'window_size': 16,'sets': 32, 'ways': 8 }
-default_l1i  = { 'sets': 64, 'ways': 8, 'rq_size': 64, 'wq_size': 64, 'pq_size': 32, 'mshr_size': 8, 'latency': 4, 'fill_latency': 1, 'max_read': 2, 'max_write': 2, 'prefetch_as_load': False, 'prefetcher': 'no_l1i' }
-default_l1d  = { 'sets': 64, 'ways': 12, 'rq_size': 64, 'wq_size': 64, 'pq_size': 8, 'mshr_size': 16, 'latency': 5, 'fill_latency': 1, 'max_read': 2, 'max_write': 2, 'prefetch_as_load': False, 'prefetcher': 'no_l1d' }
-default_l2c  = { 'sets': 1024, 'ways': 8, 'rq_size': 32, 'wq_size': 32, 'pq_size': 16, 'mshr_size': 32, 'latency': 10, 'fill_latency': 1, 'max_read': 1, 'max_write': 1, 'prefetch_as_load': False, 'prefetcher': 'no_l2c' }
-default_itlb = { 'sets': 16, 'ways': 4, 'rq_size': 16, 'wq_size': 16, 'pq_size': 0, 'mshr_size': 8, 'latency': 1, 'fill_latency': 1, 'max_read': 2, 'max_write': 2, 'prefetch_as_load': False }
-default_dtlb = { 'sets': 16, 'ways': 4, 'rq_size': 16, 'wq_size': 16, 'pq_size': 0, 'mshr_size': 8, 'latency': 1, 'fill_latency': 1, 'max_read': 2, 'max_write': 2, 'prefetch_as_load': False }
-default_stlb = { 'sets': 128, 'ways': 12, 'rq_size': 32, 'wq_size': 32, 'pq_size': 0, 'mshr_size': 16, 'latency': 8, 'fill_latency': 1, 'max_read': 1, 'max_write': 1, 'prefetch_as_load': False }
-default_llc  = { 'sets': 2048*config_file['num_cores'], 'ways': 16, 'rq_size': 32*config_file['num_cores'], 'wq_size': 32*config_file['num_cores'], 'pq_size': 32*config_file['num_cores'], 'mshr_size': 64*config_file['num_cores'], 'latency': 20, 'fill_latency': 1, 'max_read': config_file['num_cores'], 'max_write': config_file['num_cores'], 'prefetch_as_load': False, 'prefetcher': 'no_llc', 'replacement': 'lru_llc', 'name': 'LLC', 'lower_level': 'DRAM' }
+default_l1i  = { 'sets': 64, 'ways': 8, 'rq_size': 64, 'wq_size': 64, 'pq_size': 32, 'mshr_size': 8, 'latency': 4, 'fill_latency': 1, 'max_read': 2, 'max_write': 2, 'prefetch_as_load': False, 'prefetcher': 'no_l1i', 'replacement': 'lru'}
+default_l1d  = { 'sets': 64, 'ways': 12, 'rq_size': 64, 'wq_size': 64, 'pq_size': 8, 'mshr_size': 16, 'latency': 5, 'fill_latency': 1, 'max_read': 2, 'max_write': 2, 'prefetch_as_load': False, 'prefetcher': 'no_l1d', 'replacement': 'lru'}
+default_l2c  = { 'sets': 1024, 'ways': 8, 'rq_size': 32, 'wq_size': 32, 'pq_size': 16, 'mshr_size': 32, 'latency': 10, 'fill_latency': 1, 'max_read': 1, 'max_write': 1, 'prefetch_as_load': False, 'prefetcher': 'no_l2c', 'replacement': 'lru'}
+default_itlb = { 'sets': 16, 'ways': 4, 'rq_size': 16, 'wq_size': 16, 'pq_size': 0, 'mshr_size': 8, 'latency': 1, 'fill_latency': 1, 'max_read': 2, 'max_write': 2, 'prefetch_as_load': False, 'replacement': 'lru'}
+default_dtlb = { 'sets': 16, 'ways': 4, 'rq_size': 16, 'wq_size': 16, 'pq_size': 0, 'mshr_size': 8, 'latency': 1, 'fill_latency': 1, 'max_read': 2, 'max_write': 2, 'prefetch_as_load': False, 'replacement': 'lru'}
+default_stlb = { 'sets': 128, 'ways': 12, 'rq_size': 32, 'wq_size': 32, 'pq_size': 0, 'mshr_size': 16, 'latency': 8, 'fill_latency': 1, 'max_read': 1, 'max_write': 1, 'prefetch_as_load': False, 'replacement': 'lru'}
+default_llc  = { 'sets': 2048*config_file['num_cores'], 'ways': 16, 'rq_size': 32*config_file['num_cores'], 'wq_size': 32*config_file['num_cores'], 'pq_size': 32*config_file['num_cores'], 'mshr_size': 64*config_file['num_cores'], 'latency': 20, 'fill_latency': 1, 'max_read': config_file['num_cores'], 'max_write': config_file['num_cores'], 'prefetch_as_load': False, 'prefetcher': 'no_llc', 'replacement': 'lru', 'name': 'LLC', 'lower_level': 'DRAM' }
 default_pmem = { 'frequency': 3200, 'channels': 1, 'ranks': 1, 'banks': 8, 'rows': 65536, 'columns': 128, 'row_size': 8, 'channel_width': 8, 'wq_size': 64, 'rq_size': 64, 'tRP': 12.5, 'tRCD': 12.5, 'tCAS': 12.5 }
 default_vmem = { 'size': 8589934592, 'num_levels': 5 }
 
@@ -174,26 +174,37 @@ for freq,src in zip(freqs, itertools.chain(cores, caches.values(), (config_file[
 # Check to make sure modules exist and they correspond to any already-built modules.
 ###
 
+# derive function names for replacement
+for cache in caches.values():
+    if cache['replacement'] is not None:
+        cache['replacement_initialize'] = 'repl_' + os.path.basename(cache['replacement']) + '_initialize'
+        cache['replacement_find_victim'] = 'repl_' + os.path.basename(cache['replacement']) + '_victim'
+        cache['replacement_update_replacement_state'] = 'repl_' + os.path.basename(cache['replacement']) + '_update'
+        cache['replacement_replacement_final_stats'] = 'repl_' + os.path.basename(cache['replacement']) + '_final_stats'
+
 # Associate modules with paths
 libfilenames = {}
 for i,cpu in enumerate(cores[:1]):
     if caches[cpu['L1I']]['prefetcher'] is not None:
-        libfilenames['cpu' + str(i) + 'l1iprefetcher.a'] = 'prefetcher/' + caches[cpu['L1I']]['prefetcher']
+        libfilenames['cpu' + str(i) + 'l1iprefetcher.a'] = ('prefetcher/' + caches[cpu['L1I']]['prefetcher'], '')
     if caches[cpu['L1D']]['prefetcher'] is not None:
-        libfilenames['cpu' + str(i) + 'l1dprefetcher.a'] = 'prefetcher/' + caches[cpu['L1D']]['prefetcher']
+        libfilenames['cpu' + str(i) + 'l1dprefetcher.a'] = ('prefetcher/' + caches[cpu['L1D']]['prefetcher'], '')
     if caches[caches[cpu['L1D']]['lower_level']]['prefetcher'] is not None:
-        libfilenames['cpu' + str(i) + 'l2cprefetcher.a'] = 'prefetcher/' + caches[caches[cpu['L1D']]['lower_level']]['prefetcher']
+        libfilenames['cpu' + str(i) + 'l2cprefetcher.a'] = ('prefetcher/' + caches[caches[cpu['L1D']]['lower_level']]['prefetcher'], '')
     if cpu['branch_predictor'] is not None:
-        libfilenames['cpu' + str(i) + 'branch_predictor.a'] = 'branch/' + cpu['branch_predictor']
+        libfilenames['cpu' + str(i) + 'branch_predictor.a'] = ('branch/' + cpu['branch_predictor'], '')
     if cpu['btb'] is not None:
-        libfilenames['cpu' + str(i) + 'btb.a'] = 'btb/' + cpu['btb']
+        libfilenames['cpu' + str(i) + 'btb.a'] = ('btb/' + cpu['btb'], '')
 if caches['LLC']['prefetcher'] is not None:
-    libfilenames['llprefetcher.a'] = 'prefetcher/' + caches['LLC']['prefetcher']
-if caches['LLC']['replacement'] is not None:
-    libfilenames['llreplacement.a'] = 'replacement/' + caches['LLC']['replacement']
+    libfilenames['llprefetcher.a'] = ('prefetcher/' + caches['LLC']['prefetcher'], '')
+
+for cache in caches.values():
+    if cache['replacement'] is not None:
+        fname = 'replacement/' + cache['replacement']
+        libfilenames['repl_' + cache['replacement'] + '.a'] = (fname, '-Dinitialize_replacement=repl_$(notdir {0})_initialize -Dfind_victim=repl_$(notdir {0})_victim -Dupdate_replacement_state=repl_$(notdir {0})_update -Dreplacement_final_stats=repl_$(notdir {0})_final_stats'.format(fname))
 
 # Assert module paths exist
-for path in libfilenames.values():
+for path,_ in libfilenames.values():
     if not os.path.exists(path):
         print('Path "' + path + '" does not exist. Exiting...')
         sys.exit(1)
@@ -271,6 +282,13 @@ with open(instantiation_file_name, 'wt') as wfp:
         wfp.write('&cpu{}_inst'.format(i))
     wfp.write('\n};\n')
 
+    wfp.write('std::array<CACHE*, NUM_CACHES> caches {\n')
+    for i,cache in enumerate(caches):
+        if i > 0:
+            wfp.write(',')
+        wfp.write('&{name}'.format(**cache))
+    wfp.write('\n};\n')
+
     wfp.write('std::array<champsim::operable*, NUM_OPERABLES> operables {\n')
     for i in range(len(cores)):
         wfp.write('&cpu{}_inst, '.format(i))
@@ -285,6 +303,24 @@ with open(instantiation_file_name, 'wt') as wfp:
     wfp.write(vmem_fmtstr.format(attrs=config_file['virtual_memory']))
     wfp.write('\n')
 
+# Cache modules file
+repl_inits   = {c['replacement_initialize'] for c in caches}
+repl_victims = {c['replacement_find_victim'] for c in caches}
+repl_updates = {c['replacement_update_replacement_state'] for c in caches}
+repl_finals  = {c['replacement_replacement_final_stats'] for c in caches}
+with open('inc/cache_modules.inc', 'wt') as wfp:
+    for i in repl_inits:
+        wfp.write('void ' + i + '();\n')
+
+    for v in repl_victims:
+        wfp.write('uint32_t ' + v + '(uint32_t, uint64_t, uint32_t, const BLOCK*, uint64_t, uint64_t, uint32_t);\n')
+
+    for u in repl_updates:
+        wfp.write('void ' + u + '(uint32_t, uint32_t, uint32_t, uint64_t, uint64_t, uint64_t, uint32_t, uint8_t);\n')
+
+    for f in repl_finals:
+        wfp.write('void ' + f + '();\n')
+
 # Constants header
 with open(constants_header_name, 'wt') as wfp:
     wfp.write('/***\n * THIS FILE IS AUTOMATICALLY GENERATED\n * Do not edit this file. It will be overwritten when the configure script is run.\n ***/\n\n')
@@ -297,6 +333,7 @@ with open(constants_header_name, 'wt') as wfp:
     wfp.write(define_log_fmtstr.format(name='page_size').format(names=const_names, config=config_file))
     wfp.write(define_fmtstr.format(name='heartbeat_frequency').format(names=const_names, config=config_file))
     wfp.write(define_fmtstr.format(name='num_cores').format(names=const_names, config=config_file))
+    wfp.write('#define NUM_CACHES ' + str(len(caches)) + 'u\n')
     wfp.write('#define NUM_OPERABLES ' + str(len(cores) + len(caches) + 1) + 'u\n')
 
     for k in const_names['physical_memory']:
@@ -325,8 +362,8 @@ with open('Makefile', 'wt') as wfp:
     wfp.write(config_file['executable_name'] + ': $(patsubst %.cc,%.o,$(wildcard src/*.cc)) ' + ' '.join('obj/' + k for k in libfilenames) + '\n')
     wfp.write('\t$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)\n\n')
 
-    for kv in libfilenames.items():
-        wfp.write(module_make_fmtstr.format(*kv))
+    for k,v in libfilenames.items():
+        wfp.write(module_make_fmtstr.format(k, *v))
 
     wfp.write('-include $(wildcard prefetcher/*/*.d)\n')
     wfp.write('-include $(wildcard branch/*/*.d)\n')
