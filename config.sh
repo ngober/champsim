@@ -178,24 +178,66 @@ for freq,src in zip(freqs, itertools.chain(cores, caches.values(), (config_file[
 libfilenames = {}
 for i,cpu in enumerate(cores[:1]):
     if caches[cpu['L1I']]['prefetcher'] is not None:
-        libfilenames['cpu' + str(i) + 'l1iprefetcher.a'] = 'prefetcher/' + caches[cpu['L1I']]['prefetcher']
-    if caches[cpu['L1D']]['prefetcher'] is not None:
-        libfilenames['cpu' + str(i) + 'l1dprefetcher.a'] = 'prefetcher/' + caches[cpu['L1D']]['prefetcher']
-    if caches[caches[cpu['L1D']]['lower_level']]['prefetcher'] is not None:
-        libfilenames['cpu' + str(i) + 'l2cprefetcher.a'] = 'prefetcher/' + caches[caches[cpu['L1D']]['lower_level']]['prefetcher']
-    if cpu['branch_predictor'] is not None:
-        libfilenames['cpu' + str(i) + 'branch_predictor.a'] = 'branch/' + cpu['branch_predictor']
-    if cpu['btb'] is not None:
-        libfilenames['cpu' + str(i) + 'btb.a'] = 'btb/' + cpu['btb']
-if caches['LLC']['prefetcher'] is not None:
-    libfilenames['llprefetcher.a'] = 'prefetcher/' + caches['LLC']['prefetcher']
-if caches['LLC']['replacement'] is not None:
-    libfilenames['llreplacement.a'] = 'replacement/' + caches['LLC']['replacement']
+        if os.path.exists('prefetcher/' + caches[cpu['L1I']]['prefetcher']):
+            libfilenames['cpu' + str(i) + 'l1iprefetcher.a'] = 'prefetcher/' + caches[cpu['L1I']]['prefetcher']
+        elif os.path.exists(os.path.normpath(os.path.expanduser(caches[cpu['L1I']]['prefetcher']))):
+            libfilenames['cpu' + str(i) + 'l1iprefetcher.a'] = os.path.normpath(os.path.expanduser(caches[cpu['L1I']]['prefetcher']))
+        else:
+            print('Path to L1I prefetcher does not exist. Exiting...')
+            sys.exit(1)
 
-# Assert module paths exist
-for path in libfilenames.values():
-    if not os.path.exists(path):
-        print('Path "' + path + '" does not exist. Exiting...')
+    if caches[cpu['L1D']]['prefetcher'] is not None:
+        if os.path.exists('prefetcher/' + caches[cpu['L1D']]['prefetcher']):
+            libfilenames['cpu' + str(i) + 'l1dprefetcher.a'] = 'prefetcher/' + caches[cpu['L1D']]['prefetcher']
+        elif os.path.exists(os.path.normpath(os.path.expanduser(caches[cpu['L1D']]['prefetcher']))):
+            libfilenames['cpu' + str(i) + 'l1dprefetcher.a'] = os.path.normpath(os.path.expanduser(caches[cpu['L1D']]['prefetcher']))
+        else:
+            print('Path to L1D prefetcher does not exist. Exiting...')
+            sys.exit(1)
+
+    if caches[cpu['L2C']]['prefetcher'] is not None:
+        if os.path.exists('prefetcher/' + caches[cpu['L2C']]['prefetcher']):
+            libfilenames['cpu' + str(i) + 'l2cprefetcher.a'] = 'prefetcher/' + caches[cpu['L2C']]['prefetcher']
+        elif os.path.exists(os.path.normpath(os.path.expanduser(caches[cpu['L2C']]['prefetcher']))):
+            libfilenames['cpu' + str(i) + 'l2cprefetcher.a'] = os.path.normpath(os.path.expanduser(caches[cpu['L2C']]['prefetcher']))
+        else:
+            print('Path to L2C prefetcher does not exist. Exiting...')
+            sys.exit(1)
+
+    if cpu['branch_predictor'] is not None:
+        if os.path.exists('branch/' + cpu['branch_predictor']):
+            libfilenames['cpu' + str(i) + 'branch_predictor.a'] = 'branch/' + cpu['branch_predictor']
+        elif os.path.exists(os.path.normpath(os.path.expanduser(cpu['branch_predictor']))):
+            libfilenames['cpu' + str(i) + 'branch_predictor.a'] = os.path.normpath(os.path.expanduser(cpu['branch_predictor']))
+        else:
+            print('Path to branch predictor does not exist. Exiting...')
+            sys.exit(1)
+
+    if cpu['btb'] is not None:
+        if os.path.exists('btb/' + cpu['btb']):
+            libfilenames['cpu' + str(i) + 'btb.a'] = 'btb/' + cpu['btb']
+        elif os.path.exists(os.path.normpath(os.path.expanduser(cpu['btb']))):
+            libfilenames['cpu' + str(i) + 'btb.a'] = os.path.normpath(os.path.expanduser(cpu['btb']))
+        else:
+            print('Path to BTB does not exist. Exiting...')
+            sys.exit(1)
+
+if caches['LLC']['prefetcher'] is not None:
+    if os.path.exists('prefetcher/' + caches['LLC']['prefetcher']):
+        libfilenames['cpu' + str(i) + 'llprefetcher.a'] = 'prefetcher/' + caches['LLC']['prefetcher']
+    elif os.path.exists(os.path.normpath(os.path.expanduser(caches['LLC']['prefetcher']))):
+        libfilenames['cpu' + str(i) + 'llprefetcher.a'] = os.path.normpath(os.path.expanduser(caches['LLC']['prefetcher']))
+    else:
+        print('Path to LLC prefetcher does not exist. Exiting...')
+        sys.exit(1)
+
+if caches['LLC']['replacement'] is not None:
+    if os.path.exists('replacement/' + caches['LLC']['replacement']):
+        libfilenames['cpu' + str(i) + 'llreplacement.a'] = 'replacement/' + caches['LLC']['replacement']
+    elif os.path.exists(os.path.normpath(os.path.expanduser(caches['LLC']['replacement']))):
+        libfilenames['cpu' + str(i) + 'llreplacement.a'] = os.path.normpath(os.path.expanduser(caches['LLC']['replacement']))
+    else:
+        print('Path to LLC replacement does not exist. Exiting...')
         sys.exit(1)
 
 # Check cache of previous configuration
@@ -321,7 +363,10 @@ with open('Makefile', 'wt') as wfp:
     wfp.write('\n')
     wfp.write('.phony: all clean\n\n')
     wfp.write('all: ' + config_file['executable_name'] + '\n\n')
-    wfp.write('clean: \n\t find . -name \*.o -delete\n\t find . -name \*.d -delete\n\t $(RM) -r obj\n\n')
+    wfp.write('clean: \n\t find . -name \*.o -delete\n\t find . -name \*.d -delete\n\t $(RM) -r obj\n')
+    for v in libfilenames.values():
+        wfp.write('\t find {0} -name \*.o -delete\n\t find {0} -name \*.d -delete\n'.format(v))
+    wfp.write('\n')
     wfp.write(config_file['executable_name'] + ': $(patsubst %.cc,%.o,$(wildcard src/*.cc)) ' + ' '.join('obj/' + k for k in libfilenames) + '\n')
     wfp.write('\t$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)\n\n')
 
