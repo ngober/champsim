@@ -394,7 +394,12 @@ with open('Makefile', 'wt') as wfp:
     wfp.write('\n')
     wfp.write('.phony: all clean\n\n')
     wfp.write('all: ' + config_file['executable_name'] + '\n\n')
-    wfp.write('clean: \n\t find . -name \*.o -delete\n\t find . -name \*.d -delete\n\t $(RM) -r obj\n\n')
+    wfp.write('clean: \n')
+    wfp.write('\t$(RM) ' + constants_header_name + '\n')
+    wfp.write('\t$(RM) ' + instantiation_file_name + '\n')
+    wfp.write('\t$(RM) ' + 'inc/cache_modules.inc' + '\n')
+    wfp.write('\t$(RM) ' + 'inc/ooo_cpu_modules.inc' + '\n')
+    wfp.write('\t find . -name \*.o -delete\n\t find . -name \*.d -delete\n\t $(RM) -r obj\n\n')
     wfp.write(config_file['executable_name'] + ': $(patsubst %.cc,%.o,$(wildcard src/*.cc)) ' + ' '.join('obj/' + k for k in libfilenames) + '\n')
     wfp.write('\t$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)\n\n')
 
