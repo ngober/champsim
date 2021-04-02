@@ -4,6 +4,7 @@
 #include <array>
 #include <queue>
 #include <functional>
+#include <queue>
 
 #include "champsim_constants.h"
 #include "delay_queue.hpp"
@@ -11,6 +12,7 @@
 #include "cache.h"
 #include "instruction.h"
 #include "operable.h"
+#include "ptw.h"
 
 using namespace std;
 
@@ -64,13 +66,13 @@ class O3_CPU : public champsim::operable {
     std::queue<uint64_t> STA;
 
     // Ready-To-Execute
-    std::queue<uint32_t> ready_to_execute;
+    std::queue<ooo_model_instr*> ready_to_execute;
 
     // Ready-To-Load
-    std::queue<uint32_t> RTL0, RTL1;
+    std::queue<LSQ_ENTRY*> RTL0, RTL1;
 
     // Ready-To-Store
-    std::queue<uint32_t> RTS0, RTS1;
+    std::queue<LSQ_ENTRY*> RTS0, RTS1;
 
     // branch
     int branch_mispredict_stall_fetch = 0; // flag that says that we should stall because a branch prediction was wrong
@@ -85,6 +87,8 @@ class O3_CPU : public champsim::operable {
 
     CacheBus ITLB_bus, DTLB_bus, L1I_bus, L1D_bus;
   
+	PageTableWalker *PTW;
+
     // constructor
     O3_CPU(uint32_t cpu, double freq_scale, std::size_t dib_set, std::size_t dib_way, std::size_t dib_window,
             std::size_t ifetch_buffer_size, std::size_t decode_buffer_size, std::size_t dispatch_buffer_size,
@@ -92,7 +96,7 @@ class O3_CPU : public champsim::operable {
             unsigned fetch_width, unsigned decode_width, unsigned dispatch_width, unsigned schedule_width,
             unsigned execute_width, unsigned lq_width, unsigned sq_width, unsigned retire_width,
             unsigned mispredict_penalty, unsigned decode_latency, unsigned dispatch_latency, unsigned schedule_latency, unsigned execute_latency,
-            CACHE *itlb, CACHE *dtlb, CACHE *l1i, CACHE *l1d,
+            CACHE *itlb, CACHE *dtlb, CACHE *l1i, CACHE *l1d, PageTableWalker *ptw,
             std::function<void(O3_CPU*)> bpred_initialize,
             std::function<void(O3_CPU*, uint64_t, uint64_t, uint8_t, uint8_t)> bpred_last_branch_result,
             std::function<uint8_t(O3_CPU*, uint64_t, uint64_t, uint8_t, uint8_t)> bpred_predict_branch,
@@ -106,7 +110,7 @@ class O3_CPU : public champsim::operable {
         FETCH_WIDTH(fetch_width), DECODE_WIDTH(decode_width), DISPATCH_WIDTH(dispatch_width), SCHEDULER_SIZE(schedule_width),
         EXEC_WIDTH(execute_width), LQ_WIDTH(lq_width), SQ_WIDTH(sq_width), RETIRE_WIDTH(retire_width),
         BRANCH_MISPREDICT_PENALTY(mispredict_penalty), SCHEDULING_LATENCY(schedule_latency), EXEC_LATENCY(execute_latency),
-        ITLB_bus(rob_size, itlb), DTLB_bus(rob_size, dtlb), L1I_bus(rob_size, l1i), L1D_bus(rob_size, l1d),
+        ITLB_bus(rob_size, itlb), DTLB_bus(rob_size, dtlb), L1I_bus(rob_size, l1i), L1D_bus(rob_size, l1d), PTW(ptw),
         impl_branch_predictor_initialize(std::bind(bpred_initialize, this)),
         impl_last_branch_result(std::bind(bpred_last_branch_result, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4)),
         impl_predict_branch(std::bind(bpred_predict_branch, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4)),
@@ -126,6 +130,9 @@ class O3_CPU : public champsim::operable {
         static_cast<CACHE*>(dtlb->lower_level)->cpu = this->cpu;
         static_cast<CACHE*>(dtlb->lower_level)->cache_type = IS_STLB;
         static_cast<CACHE*>(dtlb->lower_level)->fill_level = FILL_L2;
+
+        ptw->cpu = this->cpu;
+        ptw->cache_type = IS_PTW;
 
         // PRIVATE CACHE
         l1i->cpu = this->cpu;
@@ -149,29 +156,35 @@ class O3_CPU : public champsim::operable {
 
     // functions
     void init_instruction(ooo_model_instr instr);
-    void fetch_instruction(),
+    void check_dib(),
+         translate_fetch(),
+         fetch_instruction(),
+         promote_to_decode(),
          decode_instruction(),
          dispatch_instruction(),
          schedule_instruction(),
          execute_instruction(),
          schedule_memory_instruction(),
          execute_memory_instruction(),
-         do_scheduling(uint32_t rob_index),  
-         reg_dependency(uint32_t rob_index),
-         do_execution(uint32_t rob_index),
+         do_check_dib(ooo_model_instr &instr),
+         do_translate_fetch(champsim::circular_buffer<ooo_model_instr>::iterator begin, champsim::circular_buffer<ooo_model_instr>::iterator end),
+         do_fetch_instruction(champsim::circular_buffer<ooo_model_instr>::iterator begin, champsim::circular_buffer<ooo_model_instr>::iterator end),
+         do_dib_update(const ooo_model_instr &instr),
+         do_scheduling(uint32_t rob_index),
+         do_execution(ooo_model_instr *rob_it),
          do_memory_scheduling(uint32_t rob_index),
-         operate_lsq();
-    uint32_t complete_execution(uint32_t rob_index);
-    void reg_RAW_dependency(uint32_t prior, uint32_t current, uint32_t source_index),
-         reg_RAW_release(uint32_t rob_index),
-         mem_RAW_dependency(uint32_t prior, uint32_t current, uint32_t data_index, uint32_t lq_index),
+         operate_lsq(),
+         do_complete_execution(uint32_t rob_index),
+         do_sq_forward_to_lq(LSQ_ENTRY &sq_entry, LSQ_ENTRY &lq_entry),
          release_load_queue(uint32_t lq_index);
 
     void initialize_core();
     void add_load_queue(uint32_t rob_index, uint32_t data_index),
          add_store_queue(uint32_t rob_index, uint32_t data_index),
-         execute_store(uint32_t rob_index, uint32_t sq_index, uint32_t data_index);
-    int  execute_load(uint32_t rob_index, uint32_t sq_index, uint32_t data_index);
+         execute_store(LSQ_ENTRY *sq_it);
+    int  execute_load(LSQ_ENTRY *lq_it);
+    int  do_translate_store(LSQ_ENTRY *sq_it);
+    int  do_translate_load(LSQ_ENTRY *lq_it);
     void check_dependency(int prior, int current);
     void operate_cache();
     void complete_inflight_instruction();
@@ -181,8 +194,6 @@ class O3_CPU : public champsim::operable {
     uint32_t check_rob(uint64_t instr_id);
 
     uint32_t check_and_add_lsq(uint32_t rob_index);
-
-    uint8_t mem_reg_dependence_resolved(uint32_t rob_index);
 
     // branch predictor
     const std::function<void()> impl_branch_predictor_initialize;

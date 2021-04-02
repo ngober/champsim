@@ -17,11 +17,12 @@ config_cache_name = '.champsimconfig_cache'
 dcn_fmtstr = 'cpu{}_{}' # default cache name format string
 
 cache_fmtstr = 'CACHE {name}("{name}", {frequency}, {sets}, {ways}, {wq_size}, {rq_size}, {pq_size}, {mshr_size}, {hit_latency}, {fill_latency}, {max_read}, {max_write}, {prefetch_as_load:b}, {lower_level}, &CACHE::{replacement_initialize}, &CACHE::{replacement_find_victim}, &CACHE::{replacement_update_replacement_state}, &CACHE::{replacement_replacement_final_stats});\n'
+ptw_fmtstr = 'PageTableWalker {name}("{name}", {pscl5_set}, {pscl5_way}, {pscl4_set}, {pscl4_way}, {pscl3_set}, {pscl3_way}, {pscl2_set}, {pscl2_way}, {ptw_rq_size}, {ptw_mshr_size}, {ptw_max_read}, {ptw_max_write}, {lower_level});\n'
 
-cpu_fmtstr = 'O3_CPU cpu{cpu}_inst({cpu}, {attrs[frequency]}, {attrs[DIB][sets]}, {attrs[DIB][ways]}, {attrs[DIB][window_size]}, {attrs[ifetch_buffer_size]}, {attrs[dispatch_buffer_size]}, {attrs[decode_buffer_size]}, {attrs[rob_size]}, {attrs[lq_size]}, {attrs[sq_size]}, {attrs[fetch_width]}, {attrs[decode_width]}, {attrs[dispatch_width]}, {attrs[scheduler_size]}, {attrs[execute_width]}, {attrs[lq_width]}, {attrs[sq_width]}, {attrs[retire_width]}, {attrs[mispredict_penalty]}, {attrs[decode_latency]}, {attrs[dispatch_latency]}, {attrs[schedule_latency]}, {attrs[execute_latency]}, &{attrs[ITLB]}, &{attrs[DTLB]}, &{attrs[L1I]}, &{attrs[L1D]}, &O3_CPU::{attrs[bpred_initialize]}, &O3_CPU::{attrs[bpred_last_result]}, &O3_CPU::{attrs[bpred_predict]}, &O3_CPU::{attrs[btb_initialize]}, &O3_CPU::{attrs[btb_update]}, &O3_CPU::{attrs[btb_predict]});\n'
+cpu_fmtstr = 'O3_CPU cpu{index}_inst({index}, {frequency}, {DIB[sets]}, {DIB[ways]}, {DIB[window_size]}, {ifetch_buffer_size}, {dispatch_buffer_size}, {decode_buffer_size}, {rob_size}, {lq_size}, {sq_size}, {fetch_width}, {decode_width}, {dispatch_width}, {scheduler_size}, {execute_width}, {lq_width}, {sq_width}, {retire_width}, {mispredict_penalty}, {decode_latency}, {dispatch_latency}, {schedule_latency}, {execute_latency}, &{ITLB}, &{DTLB}, &{L1I}, &{L1D}, &cpu{index}_PTW, &O3_CPU::{bpred_initialize}, &O3_CPU::{bpred_last_result}, &O3_CPU::{bpred_predict}, &O3_CPU::{btb_initialize}, &O3_CPU::{btb_update}, &O3_CPU::{btb_predict});\n'
 
-pmem_fmtstr = 'MEMORY_CONTROLLER DRAM("DRAM", {attrs[frequency]});\n'
-vmem_fmtstr = 'VirtualMemory vmem(NUM_CPUS, {attrs[size]}, PAGE_SIZE, {attrs[num_levels]}, 1);\n'
+pmem_fmtstr = 'MEMORY_CONTROLLER DRAM({frequency});\n'
+vmem_fmtstr = 'VirtualMemory vmem(NUM_CPUS, {size}, PAGE_SIZE, {num_levels}, 1);\n'
 
 module_make_fmtstr = '{1}/%.o: CFLAGS += -I{1}\n{1}/%.o: CXXFLAGS += -I{1}\n{1}/%.o: CXXFLAGS += {2}\nobj/{0}: $(patsubst %.cc,%.o,$(wildcard {1}/*.cc)) $(patsubst %.c,%.o,$(wildcard {1}/*.c))\n\t@mkdir -p $(dir $@)\n\tar -rcs $@ $^\n\n'
 
@@ -51,7 +52,8 @@ const_names = {
         'rq_size': 'DRAM_RQ_SIZE',
         'tRP': 'tRP_DRAM_NANOSECONDS',
         'tRCD': 'tRCD_DRAM_NANOSECONDS',
-        'tCAS': 'tCAS_DRAM_NANOSECONDS'
+        'tCAS': 'tCAS_DRAM_NANOSECONDS',
+        'turn_around_time': 'DBUS_TURN_AROUND_NANOSECONDS'
     }
 }
 
@@ -78,9 +80,9 @@ default_itlb = { 'sets': 16, 'ways': 4, 'rq_size': 16, 'wq_size': 16, 'pq_size':
 default_dtlb = { 'sets': 16, 'ways': 4, 'rq_size': 16, 'wq_size': 16, 'pq_size': 0, 'mshr_size': 8, 'latency': 1, 'fill_latency': 1, 'max_read': 2, 'max_write': 2, 'prefetch_as_load': False, 'replacement': 'lru'}
 default_stlb = { 'sets': 128, 'ways': 12, 'rq_size': 32, 'wq_size': 32, 'pq_size': 0, 'mshr_size': 16, 'latency': 8, 'fill_latency': 1, 'max_read': 1, 'max_write': 1, 'prefetch_as_load': False, 'replacement': 'lru'}
 default_llc  = { 'sets': 2048*config_file['num_cores'], 'ways': 16, 'rq_size': 32*config_file['num_cores'], 'wq_size': 32*config_file['num_cores'], 'pq_size': 32*config_file['num_cores'], 'mshr_size': 64*config_file['num_cores'], 'latency': 20, 'fill_latency': 1, 'max_read': config_file['num_cores'], 'max_write': config_file['num_cores'], 'prefetch_as_load': False, 'prefetcher': 'no_llc', 'replacement': 'lru', 'name': 'LLC', 'lower_level': 'DRAM' }
-default_pmem = { 'frequency': 3200, 'channels': 1, 'ranks': 1, 'banks': 8, 'rows': 65536, 'columns': 128, 'row_size': 8, 'channel_width': 8, 'wq_size': 64, 'rq_size': 64, 'tRP': 12.5, 'tRCD': 12.5, 'tCAS': 12.5 }
+default_pmem = { 'frequency': 3200, 'channels': 1, 'ranks': 1, 'banks': 8, 'rows': 65536, 'columns': 128, 'row_size': 8, 'channel_width': 8, 'wq_size': 64, 'rq_size': 64, 'tRP': 12.5, 'tRCD': 12.5, 'tCAS': 12.5, 'turn_around_time': 7.5 }
 default_vmem = { 'size': 8589934592, 'num_levels': 5 }
-
+default_ptw = { 'pscl5_set' : 1, 'pscl5_way' : 2, 'pscl4_set' : 1, 'pscl4_way': 4, 'pscl3_set' : 2, 'pscl3_way' : 4, 'pscl2_set' : 4, 'pscl2_way': 8, 'ptw_rq_size': 16, 'ptw_mshr_size': 5, 'ptw_max_read': 2, 'ptw_max_write': 2}
 ###
 # Ensure directories are present
 ###
@@ -121,6 +123,7 @@ caches['LLC'] = ChainMap(caches.get('LLC',{}), config_file['LLC'].copy(), {'freq
 
 # If specified in the core, move definition to cache array
 for i, cpu in enumerate(cores):
+    cpu['index'] = i
     for cache_name in ('L1I', 'L1D', 'L2C', 'ITLB', 'DTLB', 'STLB'):
         if isinstance(cpu[cache_name], dict):
             cpu[cache_name] = ChainMap(cpu[cache_name], {'name': dcn_fmtstr.format(i,cache_name)})
@@ -133,6 +136,7 @@ for cpu in cores:
     caches[cpu['L1D']] = ChainMap(caches[cpu['L1D']], {'frequency': cpu['frequency'], 'lower_level': cpu['L2C']}, default_l1d.copy())
     caches[cpu['ITLB']] = ChainMap(caches[cpu['ITLB']], {'frequency': cpu['frequency'], 'lower_level': cpu['STLB']}, default_itlb.copy())
     caches[cpu['DTLB']] = ChainMap(caches[cpu['DTLB']], {'frequency': cpu['frequency'], 'lower_level': cpu['STLB']}, default_dtlb.copy())
+    cpu['PTW'] = ChainMap({'name': dcn_fmtstr.format(cpu['index'], 'PTW'), 'lower_level': cpu['L1D']}, cpu.get('PTW',{}), config_file.get('PTW', {}), default_ptw.copy())
 
     # L2C
     cache_name = caches[cpu['L1D']]['lower_level']
@@ -142,7 +146,7 @@ for cpu in cores:
     # STLB
     cache_name = caches[cpu['DTLB']]['lower_level']
     if cache_name != 'DRAM':
-        caches[cache_name] = ChainMap(caches[cache_name], {'frequency': cpu['frequency']}, default_l2c.copy())
+        caches[cache_name] = ChainMap(caches[cache_name], {'frequency': cpu['frequency'], 'lower_level': dcn_fmtstr.format(cpu['index'], 'PTW')}, default_l2c.copy())
 
 # Establish default lower levels if they do not exist
 for cache in caches.values():
@@ -178,13 +182,25 @@ for freq,src in zip(freqs, itertools.chain(cores, caches.values(), (config_file[
 libfilenames = {}
 for i,cpu in enumerate(cores[:1]):
     if caches[cpu['L1I']]['prefetcher'] is not None:
-        libfilenames['cpu' + str(i) + 'l1iprefetcher.a'] = ('prefetcher/' + caches[cpu['L1I']]['prefetcher'], '')
+        if os.path.exists('prefetcher/' + caches[cpu['L1I']]['prefetcher']):
+            libfilenames['cpu' + str(i) + 'l1iprefetcher.a'] = ('prefetcher/' + caches[cpu['L1I']]['prefetcher'], '')
+        else:
+            libfilenames['cpu' + str(i) + 'l1iprefetcher.a'] = (os.path.normpath(os.path.expanduser(caches[cpu['L1I']]['prefetcher'])), '')
     if caches[cpu['L1D']]['prefetcher'] is not None:
-        libfilenames['cpu' + str(i) + 'l1dprefetcher.a'] = ('prefetcher/' + caches[cpu['L1D']]['prefetcher'], '')
+        if os.path.exists('prefetcher/' + caches[cpu['L1D']]['prefetcher']):
+            libfilenames['cpu' + str(i) + 'l1dprefetcher.a'] = ('prefetcher/' + caches[cpu['L1D']]['prefetcher'], '')
+        else:
+            libfilenames['cpu' + str(i) + 'l1dprefetcher.a'] = (os.path.normpath(os.path.expanduser(caches[cpu['L1D']]['prefetcher'])), '')
     if caches[caches[cpu['L1D']]['lower_level']]['prefetcher'] is not None:
-        libfilenames['cpu' + str(i) + 'l2cprefetcher.a'] = ('prefetcher/' + caches[caches[cpu['L1D']]['lower_level']]['prefetcher'], '')
+        if os.path.exists('prefetcher/' + caches[caches[cpu['L1D']]['lower_level']]['prefetcher']):
+            libfilenames['cpu' + str(i) + 'l2cprefetcher.a'] = ('prefetcher/' + caches[caches[cpu['L1D']]['lower_level']]['prefetcher'], '')
+        else:
+            libfilenames['cpu' + str(i) + 'l2cprefetcher.a'] = (os.path.normpath(os.path.expanduser(caches[caches[cpu['L1D']]['lower_level']]['prefetcher'])), '')
 if caches['LLC']['prefetcher'] is not None:
-    libfilenames['llprefetcher.a'] = ('prefetcher/' + caches['LLC']['prefetcher'], '')
+    if os.path.exists('prefetcher/' + caches['LLC']['prefetcher']):
+        libfilenames['cpu' + str(i) + 'llprefetcher.a'] = ('prefetcher/' + caches['LLC']['prefetcher'], '')
+    else:
+        libfilenames['cpu' + str(i) + 'llprefetcher.a'] = (os.path.normpath(os.path.expanduser(caches['LLC']['prefetcher'])), '')
 
 for cpu in cores:
     if cpu['branch_predictor'] is not None:
@@ -192,7 +208,10 @@ for cpu in cores:
         cpu['bpred_last_result'] = 'bpred_' + os.path.basename(cpu['branch_predictor']) + '_last_result'
         cpu['bpred_predict'] = 'bpred_' + os.path.basename(cpu['branch_predictor']) + '_predict'
 
-        fname = 'branch/' + cpu['branch_predictor']
+        if os.path.exists('branch/' + cpu['branch_predictor']):
+            fname = 'branch/' + cpu['branch_predictor']
+        else:
+            fname = os.path.normpath(os.path.expanduser(cpu['branch_predictor']))
         libfilenames['bpred_' + cpu['branch_predictor'] + '.a'] = (fname, '-Dinitialize_branch_predictor={} -Dlast_branch_result={} -Dpredict_branch={}'.format(cpu['bpred_initialize'], cpu['bpred_last_result'], cpu['bpred_predict']))
 
     if cpu['btb'] is not None:
@@ -200,7 +219,10 @@ for cpu in cores:
         cpu['btb_update'] = 'btb_' + os.path.basename(cpu['btb']) + '_update'
         cpu['btb_predict'] = 'btb_' + os.path.basename(cpu['btb']) + '_predict'
 
-        fname = 'btb/' + cpu['btb']
+        if os.path.exists('btb/' + cpu['btb']):
+            fname = 'btb/' + cpu['btb']
+        elif os.path.exists(os.path.normpath(os.path.expanduser(cpu['btb']))):
+            fname = os.path.normpath(os.path.expanduser(cpu['btb']))
         libfilenames['btb_' + cpu['btb'] + '.a'] = (fname, '-Dinitialize_btb={} -Dupdate_btb={} -Dbtb_prediction={}'.format(cpu['btb_initialize'], cpu['btb_update'], cpu['btb_predict']))
 
 for cache in caches.values():
@@ -210,7 +232,10 @@ for cache in caches.values():
         cache['replacement_update_replacement_state'] = 'repl_' + os.path.basename(cache['replacement']) + '_update'
         cache['replacement_replacement_final_stats'] = 'repl_' + os.path.basename(cache['replacement']) + '_final_stats'
 
-        fname = 'replacement/' + cache['replacement']
+        if os.path.exists('replacement/' + cache['replacement']):
+            fname = 'replacement/' + cache['replacement']
+        elif os.path.exists(os.path.normpath(os.path.expanduser(cache['replacement']))):
+            fname = os.path.normpath(os.path.expanduser(cache['replacement']))
         libfilenames['repl_' + cache['replacement'] + '.a'] = (fname, '-Dinitialize_replacement={} -Dfind_victim={} -Dupdate_replacement_state={} -Dreplacement_final_stats={}'.format(cache['replacement_initialize'], cache['replacement_find_victim'], cache['replacement_update_replacement_state'], cache['replacement_replacement_final_stats']))
 
 # Assert module paths exist
@@ -236,30 +261,28 @@ for f in os.listdir('obj'):
 ###
 
 # Remove name index
-caches = list(caches.values())
+memory_system = list(caches.values())
+memory_system.extend([cpu['PTW'] for cpu in cores])
 
 # Sort so that lower levels are forward-declared
-def level_cmp(cache_a, cache_b):
-    if cache_a['lower_level'] == cache_b['name']:
+def level_cmp(elem_a, elem_b):
+    if elem_a['lower_level'] == elem_b['name']:
         return -1
     return 1
 
-caches.sort(key=functools.cmp_to_key(level_cmp), reverse=True)
+memory_system.sort(key=functools.cmp_to_key(level_cmp), reverse=True)
 
 # Check for lower levels in the array
-for i in reversed(range(len(caches))):
-    ul = caches[i]
+for i in reversed(range(len(memory_system))):
+    ul = memory_system[i]
     if ul['lower_level'] != 'DRAM' and ul['lower_level'] is not None:
-        if not any((ul['lower_level'] == ll['name']) for ll in caches[:i]):
+        if not any((ul['lower_level'] == ll['name']) for ll in memory_system[:i]):
             print('Could not find cache "' + ul['lower_level'] + '" in cache array. Exiting...')
             sys.exit(1)
 
 # prune Nones
-for cache in caches:
-    if cache['lower_level'] is not None:
-        cache['lower_level'] = '&'+cache['lower_level'] # append address operator for C++
-    else:
-        cache['lower_level'] = 'NULL'
+for elem in memory_system:
+    elem['lower_level'] = '&'+elem['lower_level'] # append address operator for C++
 
 ###
 # Begin file writing
@@ -278,12 +301,17 @@ with open(instantiation_file_name, 'wt') as wfp:
     wfp.write('#include <array>\n')
     wfp.write('#include <vector>\n')
 
-    wfp.write(pmem_fmtstr.format(attrs=config_file['physical_memory']))
-    for cache in caches:
-        wfp.write(cache_fmtstr.format(**cache))
+    wfp.write(vmem_fmtstr.format(**config_file['virtual_memory']))
+    wfp.write('\n')
+    wfp.write(pmem_fmtstr.format(**config_file['physical_memory']))
+    for elem in memory_system:
+        if 'prefetch_as_load' in elem:
+            wfp.write(cache_fmtstr.format(**elem))
+        else:
+            wfp.write(ptw_fmtstr.format(**elem))
 
     for i,cpu in enumerate(cores):
-        wfp.write(cpu_fmtstr.format(cpu=i, attrs=cpu))
+        wfp.write(cpu_fmtstr.format(**cpu))
 
     wfp.write('std::array<O3_CPU*, NUM_CPUS> ooo_cpu {\n')
     for i in range(len(cores)):
@@ -293,7 +321,7 @@ with open(instantiation_file_name, 'wt') as wfp:
     wfp.write('\n};\n')
 
     wfp.write('std::array<CACHE*, NUM_CACHES> caches {\n')
-    for i,cache in enumerate(caches):
+    for i,cache in enumerate(caches.values()):
         if i > 0:
             wfp.write(',')
         wfp.write('&{name}'.format(**cache))
@@ -302,16 +330,14 @@ with open(instantiation_file_name, 'wt') as wfp:
     wfp.write('std::array<champsim::operable*, NUM_OPERABLES> operables {\n')
     for i in range(len(cores)):
         wfp.write('&cpu{}_inst, '.format(i))
+        wfp.write(('&'+dcn_fmtstr+', ').format(i,'PTW'))
     wfp.write('\n')
 
-    for cache in reversed(caches):
+    for cache in reversed(list(caches.values())):
         wfp.write('&{name}, '.format(**cache))
 
     wfp.write('\n&DRAM')
     wfp.write('\n};\n')
-
-    wfp.write(vmem_fmtstr.format(attrs=config_file['virtual_memory']))
-    wfp.write('\n')
 
 # Core modules file
 bpred_inits        = {c['bpred_initialize'] for c in cores}
@@ -340,10 +366,10 @@ with open('inc/ooo_cpu_modules.inc', 'wt') as wfp:
         wfp.write('std::pair<uint64_t, uint8_t> ' + p + '(uint64_t, uint8_t);\n')
 
 # Cache modules file
-repl_inits   = {c['replacement_initialize'] for c in caches}
-repl_victims = {c['replacement_find_victim'] for c in caches}
-repl_updates = {c['replacement_update_replacement_state'] for c in caches}
-repl_finals  = {c['replacement_replacement_final_stats'] for c in caches}
+repl_inits   = {c['replacement_initialize'] for c in caches.values()}
+repl_victims = {c['replacement_find_victim'] for c in caches.values()}
+repl_updates = {c['replacement_update_replacement_state'] for c in caches.values()}
+repl_finals  = {c['replacement_replacement_final_stats'] for c in caches.values()}
 with open('inc/cache_modules.inc', 'wt') as wfp:
     for i in repl_inits:
         wfp.write('void ' + i + '();\n')
@@ -370,10 +396,10 @@ with open(constants_header_name, 'wt') as wfp:
     wfp.write(define_fmtstr.format(name='heartbeat_frequency').format(names=const_names, config=config_file))
     wfp.write(define_fmtstr.format(name='num_cores').format(names=const_names, config=config_file))
     wfp.write('#define NUM_CACHES ' + str(len(caches)) + 'u\n')
-    wfp.write('#define NUM_OPERABLES ' + str(len(cores) + len(caches) + 1) + 'u\n')
+    wfp.write('#define NUM_OPERABLES ' + str(2*len(cores) + len(caches) + 1) + 'u\n')
 
     for k in const_names['physical_memory']:
-        if k in ['tRP', 'tRCD', 'tCAS']:
+        if k in ['tRP', 'tRCD', 'tCAS', 'turn_around_time']:
             wfp.write(define_nonint_fmtstr.format(name=k).format(names=const_names['physical_memory'], config=config_file['physical_memory']))
         else:
             wfp.write(define_fmtstr.format(name=k).format(names=const_names['physical_memory'], config=config_file['physical_memory']))
@@ -400,6 +426,9 @@ with open('Makefile', 'wt') as wfp:
     wfp.write('\t$(RM) ' + 'inc/cache_modules.inc' + '\n')
     wfp.write('\t$(RM) ' + 'inc/ooo_cpu_modules.inc' + '\n')
     wfp.write('\t find . -name \*.o -delete\n\t find . -name \*.d -delete\n\t $(RM) -r obj\n\n')
+    for v in libfilenames.values():
+        wfp.write('\t find {0} -name \*.o -delete\n\t find {0} -name \*.d -delete\n'.format(v))
+    wfp.write('\n')
     wfp.write(config_file['executable_name'] + ': $(patsubst %.cc,%.o,$(wildcard src/*.cc)) ' + ' '.join('obj/' + k for k in libfilenames) + '\n')
     wfp.write('\t$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)\n\n')
 

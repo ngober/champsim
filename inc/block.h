@@ -8,22 +8,20 @@
 #include <list>
 
 class MemoryRequestProducer;
+class LSQ_ENTRY;
 
 // message packet
 class PACKET {
   public:
     bool scheduled = false,
-         processed = false,
-         returned = false;
+         returned  = false;
 
     uint8_t asid[2] = {std::numeric_limits<uint8_t>::max(), std::numeric_limits<uint8_t>::max()},
             type = 0,
             fill_level = 0,
             pf_origin_level = 0;
 
-    int rob_index = -1,
-        producer = -1,
-        delta = 0,
+    int delta = 0,
         depth = 0,
         signature = 0,
         confidence = 0;
@@ -41,9 +39,11 @@ class PACKET {
              event_cycle = std::numeric_limits<uint64_t>::max(),
              cycle_enqueued = 0;
 
-    std::list<std::size_t> lq_index_depend_on_me = {}, sq_index_depend_on_me = {};
+    std::list<LSQ_ENTRY*> lq_index_depend_on_me = {}, sq_index_depend_on_me = {};
     std::list<champsim::circular_buffer<ooo_model_instr>::iterator> instr_depend_on_me;
     std::list<MemoryRequestProducer*> to_return;
+
+	uint8_t translation_level = 0, init_translation_level = 0; 
 };
 
 template <>
@@ -93,53 +93,6 @@ void packet_dep_merge(LIST &dest, LIST &src)
     dest.insert(d_begin, s_begin, s_end);
 }
 
-// packet queue
-struct PACKET_QUEUE {
-    string NAME;
-    uint32_t SIZE;
-
-    uint8_t  is_RQ = 0,
-             is_WQ = 0,
-             write_mode = 0;
-
-    uint32_t cpu = 0,
-             head = 0,
-             tail = 0,
-             occupancy = 0,
-             num_returned = 0,
-             next_schedule_index = 0,
-             next_process_index = 0;
-
-    uint64_t next_schedule_cycle = std::numeric_limits<uint64_t>::max(),
-             next_process_cycle = std::numeric_limits<uint64_t>::max(),
-             ACCESS = 0,
-             FORWARD = 0,
-             MERGED = 0,
-             TO_CACHE = 0,
-             ROW_BUFFER_HIT = 0,
-             ROW_BUFFER_MISS = 0,
-             FULL = 0;
-
-    PACKET *entry;
-
-    // constructor
-    PACKET_QUEUE(string v1, uint32_t v2) : NAME(v1), SIZE(v2) {
-        entry = new PACKET[SIZE];
-    };
-
-    PACKET_QUEUE() {}
-
-    // destructor
-    ~PACKET_QUEUE() {
-        delete[] entry;
-    };
-
-    // functions
-    int check_queue(PACKET* packet);
-    void add_queue(PACKET* packet),
-         remove_queue(PACKET* packet);
-};
-
 // load/store queue
 struct LSQ_ENTRY {
     uint64_t instr_id = 0,
@@ -149,14 +102,21 @@ struct LSQ_ENTRY {
              ip = 0,
              event_cycle = 0;
 
-    uint32_t rob_index = 0, data_index = 0, sq_index = std::numeric_limits<uint32_t>::max();
+    ooo_model_instr* rob_index = NULL;
 
     uint8_t translated = 0,
             fetched = 0,
             asid[2] = {std::numeric_limits<uint8_t>::max(), std::numeric_limits<uint8_t>::max()};
-// forwarding_depend_on_me[ROB_SIZE];
-    fastset
-		forwarding_depend_on_me;
+};
+
+template <>
+class is_valid<LSQ_ENTRY>
+{
+    public:
+        bool operator() (const LSQ_ENTRY &test)
+        {
+            return test.virtual_address != 0;
+        }
 };
 
 // reorder buffer
