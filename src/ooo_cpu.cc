@@ -24,10 +24,6 @@ void O3_CPU::operate()
     schedule_instruction(); // schedule instructions
     handle_memory_return(); // finalize memory transactions
     operate_lsq(); // execute memory transactions
-
-    // also handle per-cycle prefetcher operation
-    impl_prefetcher_cycle_operate();
-
     schedule_memory_instruction(); // schedule memory transactions
     dispatch_instruction(); // dispatch
     decode_instruction(); // decode
