@@ -350,6 +350,7 @@ void O3_CPU::do_translate_fetch(champsim::circular_buffer<ooo_model_instr>::iter
     trace_packet.cpu = cpu;
     trace_packet.address = begin->ip >> LOG2_PAGE_SIZE;
     trace_packet.full_addr = begin->ip;
+    trace_packet.full_v_addr = begin->ip;
     trace_packet.instr_id = begin->instr_id;
     trace_packet.ip = begin->ip;
     trace_packet.type = LOAD;
@@ -391,6 +392,7 @@ void O3_CPU::fetch_instruction()
             [find_addr](const ooo_model_instr &x){ return (find_addr >> LOG2_BLOCK_SIZE) != (x.instruction_pa >> LOG2_BLOCK_SIZE);});
     if (l1i_req_end != IFETCH_BUFFER.end() || l1i_req_begin == IFETCH_BUFFER.begin())
     {
+
         do_fetch_instruction(l1i_req_begin, l1i_req_end);
     }
 }
@@ -808,6 +810,7 @@ void O3_CPU::add_store_queue(uint32_t rob_index, uint32_t data_index)
 void O3_CPU::operate_lsq()
 {
     // handle store
+
     uint32_t store_issued = 0;
 
     while (store_issued < SQ_WIDTH && !RTS0.empty())
@@ -831,6 +834,7 @@ void O3_CPU::operate_lsq()
     }
 
     unsigned load_issued = 0;
+
     while (load_issued < LQ_WIDTH && !RTL0.empty())
     {
         // add it to DTLB
@@ -866,6 +870,7 @@ int O3_CPU::do_translate_store(LSQ_ENTRY *sq_it)
     else
         data_packet.address = sq_it->virtual_address >> LOG2_PAGE_SIZE;
     data_packet.full_addr = sq_it->virtual_address;
+    data_packet.full_v_addr = sq_it->virtual_address;
     data_packet.instr_id = sq_it->instr_id;
     data_packet.ip = sq_it->ip;
     data_packet.type = RFO;
@@ -929,6 +934,7 @@ int O3_CPU::do_translate_load(LSQ_ENTRY *lq_it)
     else
         data_packet.address = lq_it->virtual_address >> LOG2_PAGE_SIZE;
     data_packet.full_addr = lq_it->virtual_address;
+    data_packet.full_v_addr = lq_it->virtual_address;
     data_packet.instr_id = lq_it->instr_id;
     data_packet.ip = lq_it->ip;
     data_packet.type = LOAD;
