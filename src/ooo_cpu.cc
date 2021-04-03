@@ -344,7 +344,7 @@ void O3_CPU::do_translate_fetch(champsim::circular_buffer<ooo_model_instr>::iter
     // begin process of fetching this instruction by sending it to the ITLB
     // add it to the ITLB's read queue
     PACKET trace_packet;
-    trace_packet.fill_level = FILL_L1;
+    trace_packet.fill_level = ITLB_bus.lower_level->fill_level;
     trace_packet.cpu = cpu;
     trace_packet.address = begin->ip >> LOG2_PAGE_SIZE;
     trace_packet.full_addr = begin->ip;
@@ -399,7 +399,7 @@ void O3_CPU::do_fetch_instruction(champsim::circular_buffer<ooo_model_instr>::it
 {
     // add it to the L1-I's read queue
     PACKET fetch_packet;
-    fetch_packet.fill_level = FILL_L1;
+    fetch_packet.fill_level = L1I_bus.lower_level->fill_level;
     fetch_packet.cpu = cpu;
     fetch_packet.address = begin->instruction_pa >> LOG2_BLOCK_SIZE;
     fetch_packet.data = begin->instruction_pa;
@@ -529,7 +529,7 @@ void O3_CPU::dispatch_instruction()
 
 int O3_CPU::prefetch_code_line(uint64_t pf_v_addr)
 {
-    return static_cast<CACHE*>(L1I_bus.lower_level)->va_prefetch_line(pf_v_addr, pf_v_addr, FILL_L1, 0);
+    return static_cast<CACHE*>(L1I_bus.lower_level)->va_prefetch_line(pf_v_addr, pf_v_addr, true, 0);
 }
 
 void O3_CPU::schedule_instruction()
@@ -861,7 +861,7 @@ int O3_CPU::do_translate_store(LSQ_ENTRY *sq_it)
 {
     PACKET data_packet;
 
-    data_packet.fill_level = FILL_L1;
+    data_packet.fill_level = DTLB_bus.lower_level->fill_level;
     data_packet.cpu = cpu;
     if (knob_cloudsuite)
         data_packet.address = splice_bits(sq_it->virtual_address, sq_it->asid[1], LOG2_PAGE_SIZE);
@@ -925,7 +925,7 @@ void O3_CPU::execute_store(LSQ_ENTRY *sq_it)
 int O3_CPU::do_translate_load(LSQ_ENTRY *lq_it)
 {
     PACKET data_packet;
-    data_packet.fill_level = FILL_L1;
+    data_packet.fill_level = DTLB_bus.lower_level->fill_level;
     data_packet.cpu = cpu;
     if (knob_cloudsuite)
         data_packet.address = splice_bits(lq_it->virtual_address, lq_it->asid[1], LOG2_PAGE_SIZE);
@@ -956,7 +956,7 @@ int O3_CPU::execute_load(LSQ_ENTRY *lq_it)
 {
     // add it to L1D
     PACKET data_packet;
-    data_packet.fill_level = FILL_L1;
+    data_packet.fill_level = L1D_bus.lower_level->fill_level;
     data_packet.cpu = cpu;
     data_packet.address = lq_it->physical_address >> LOG2_BLOCK_SIZE;
     data_packet.full_addr = lq_it->physical_address;
@@ -1178,7 +1178,7 @@ void O3_CPU::retire_rob()
 
                 // sq_index and rob_index are no longer available after retirement
                 // but we pass this information to avoid segmentation fault
-                data_packet.fill_level = FILL_L1;
+                data_packet.fill_level = L1D_bus.lower_level->fill_level;
                 data_packet.cpu = cpu;
                 data_packet.address = sq_it->physical_address >> LOG2_BLOCK_SIZE;
                 data_packet.full_addr = sq_it->physical_address;
