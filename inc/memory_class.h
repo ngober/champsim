@@ -28,9 +28,7 @@ class BLOCK {
         confidence = 0;
 
     uint64_t address = 0,
-             full_addr = 0,
              v_address,
-             full_v_addr,
              tag = 0,
              data = 0,
              ip,
@@ -52,9 +50,7 @@ class BLOCK {
         signature(packet.signature),
         confidence(packet.confidence),
         address(packet.address),
-        full_addr(packet.full_addr),
         v_address(packet.v_address),
-        full_v_addr(packet.full_v_addr),
         tag(packet.address),
         data(packet.data),
         ip(packet.ip),
