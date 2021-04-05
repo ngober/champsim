@@ -115,7 +115,7 @@ if original_size <= config_file['num_cores']:
     for i in range(original_size, config_file['num_cores']):
         cores.append(copy.deepcopy(cores[(i-1) % original_size]))
 else:
-    cores = config_file[:(config_file['num_cores'] - original_size)]
+    cores = cores[:(config_file['num_cores'] - original_size)]
 
 # Append LLC to cache array
 # LLC operates at maximum freqency of cores, if not already specified
@@ -147,6 +147,11 @@ for cpu in cores:
     cache_name = caches[cpu['DTLB']]['lower_level']
     if cache_name != 'DRAM':
         caches[cache_name] = ChainMap(caches[cache_name], {'frequency': cpu['frequency'], 'lower_level': dcn_fmtstr.format(cpu['index'], 'PTW')}, default_l2c.copy())
+
+    # LLC
+    cache_name = caches[caches[cpu['L1D']]['lower_level']]['lower_level']
+    if cache_name != 'DRAM':
+        caches[cache_name] = ChainMap(caches[cache_name], default_llc.copy())
 
 # Establish default lower levels if they do not exist
 for cache in caches.values():
@@ -365,12 +370,15 @@ for fill_level in range(1,len(memory_system)+1):
 memory_system = list(memory_system.values())
 
 # Sort so that lower levels are forward-declared
-def level_cmp(elem_a, elem_b):
-    if elem_a['lower_level'] == elem_b['name']:
-        return -1
-    return 1
-
-memory_system.sort(key=functools.cmp_to_key(level_cmp), reverse=True)
+i = 0
+while i < len(memory_system):
+    j = len(memory_system) - 1
+    while j > i and memory_system[i]['lower_level'] != memory_system[j]['name']:
+        j = j-1
+    if j != i:
+        memory_system[i:j+1] = memory_system[i+1:j+1] + [memory_system[i]]
+    else:
+        i = i+1
 
 # Check for lower levels in the array
 for i in reversed(range(len(memory_system))):
@@ -405,10 +413,10 @@ with open(instantiation_file_name, 'wt') as wfp:
     wfp.write('\n')
     wfp.write(pmem_fmtstr.format(**config_file['physical_memory']))
     for elem in memory_system:
-        if 'prefetch_as_load' in elem:
-            wfp.write(cache_fmtstr.format(**elem))
-        else:
+        if 'pscl5_set' in elem:
             wfp.write(ptw_fmtstr.format(**elem))
+        else:
+            wfp.write(cache_fmtstr.format(**elem))
 
     for i,cpu in enumerate(cores):
         wfp.write(cpu_fmtstr.format(**cpu))
@@ -421,10 +429,11 @@ with open(instantiation_file_name, 'wt') as wfp:
     wfp.write('\n};\n')
 
     wfp.write('std::array<CACHE*, NUM_CACHES> caches {\n')
-    for i,cache in enumerate(caches.values()):
-        if i > 0:
-            wfp.write(',')
-        wfp.write('&{name}'.format(**cache))
+    for i,elem in enumerate(memory_system):
+        if 'pscl5_set' not in elem:
+            if i > 0:
+                wfp.write(',')
+            wfp.write('&'+elem['name'])
     wfp.write('\n};\n')
 
     wfp.write('std::array<champsim::operable*, NUM_OPERABLES> operables {\n')
