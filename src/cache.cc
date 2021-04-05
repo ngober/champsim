@@ -577,7 +577,6 @@ int CACHE::va_prefetch_line(uint64_t ip, uint64_t pf_addr, bool fill_this_level,
       pf_packet.address = pf_addr; // make address == v_address before translation just so we can use VAPQ's check_queue() function
       pf_packet.ip = ip;
       pf_packet.type = PREFETCH;
-      pf_packet.to_return = {this};
 
       auto vapq_entry = std::find_if(VAPQ.begin(), VAPQ.end(), eq_addr<PACKET>(pf_addr, OFFSET_BITS));
       if(vapq_entry != VAPQ.end())
