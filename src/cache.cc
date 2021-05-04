@@ -22,7 +22,7 @@ void CACHE::handle_fill()
     while (writes_available_this_cycle > 0)
     {
         auto fill_mshr = MSHR.begin();
-        if (!fill_mshr->returned || fill_mshr->event_cycle > current_cycle)
+        if (fill_mshr == std::end(MSHR) || fill_mshr->event_cycle > current_cycle)
             return;
 
         // find victim
@@ -47,11 +47,8 @@ void CACHE::handle_fill()
                 ret->return_data(&(*fill_mshr));
         }
 
-        PACKET empty;
-        *fill_mshr = empty;
-
+        MSHR.erase(fill_mshr);
         writes_available_this_cycle--;
-        MSHR.sort(min_fill_index());
     }
 }
 
@@ -187,7 +184,8 @@ void CACHE::readlike_hit(std::size_t set, std::size_t way, PACKET &handle_pkt)
     if (handle_pkt.type == LOAD || (handle_pkt.type == PREFETCH && handle_pkt.pf_origin_level < fill_level))
     {
         cpu = handle_pkt.cpu;
-        handle_pkt.pf_metadata = impl_prefetcher_operate(handle_pkt.v_address & ~bitmask(match_offset_bits ? 0 : OFFSET_BITS), handle_pkt.address & ~bitmask(match_offset_bits ? 0 : OFFSET_BITS), handle_pkt.ip, 1, handle_pkt.type, handle_pkt.pf_metadata);
+        uint64_t pf_base_addr = (virtual_prefetch ? handle_pkt.v_address : handle_pkt.address) & ~bitmask(match_offset_bits ? 0 : OFFSET_BITS);
+        handle_pkt.pf_metadata = impl_prefetcher_operate(pf_base_addr, handle_pkt.ip, 1, handle_pkt.type, handle_pkt.pf_metadata);
     }
 
     // update replacement policy
@@ -212,7 +210,7 @@ bool CACHE::readlike_miss(PACKET &handle_pkt)
 {
     // check mshr
     auto mshr_entry = std::find_if(MSHR.begin(), MSHR.end(), eq_addr<PACKET>(handle_pkt.address, OFFSET_BITS));
-    bool mshr_full = std::all_of(MSHR.begin(), MSHR.end(), is_valid<PACKET>());
+    bool mshr_full = (MSHR.size() == MSHR_SIZE);
 
     if (mshr_entry != MSHR.end()) // miss already inflight
     {
@@ -226,12 +224,10 @@ bool CACHE::readlike_miss(PACKET &handle_pkt)
 
         if (mshr_entry->type == PREFETCH && handle_pkt.type != PREFETCH)
         {
-            bool  prior_returned = mshr_entry->returned;
             uint64_t prior_event_cycle = mshr_entry->event_cycle;
             *mshr_entry = handle_pkt;
 
-            // in case request is already returned, we should keep event_cycle and retunred variables
-            mshr_entry->returned = prior_returned;
+            // in case request is already returned, we should keep event_cycle
             mshr_entry->event_cycle = prior_event_cycle;
         }
     }
@@ -250,11 +246,9 @@ bool CACHE::readlike_miss(PACKET &handle_pkt)
         // Allocate an MSHR
         if (handle_pkt.fill_level <= fill_level)
         {
-            auto it = std::find_if_not(MSHR.begin(), MSHR.end(), is_valid<PACKET>());
-            assert(it != std::end(MSHR));
-            *it = handle_pkt;
-            it->returned = false;
+            auto it = MSHR.insert(std::end(MSHR), handle_pkt);
             it->cycle_enqueued = current_cycle;
+            it->event_cycle = std::numeric_limits<uint64_t>::max();
         }
 
         if (handle_pkt.fill_level <= fill_level)
@@ -272,7 +266,8 @@ bool CACHE::readlike_miss(PACKET &handle_pkt)
     if (handle_pkt.type == LOAD || (handle_pkt.type == PREFETCH && handle_pkt.pf_origin_level < fill_level))
     {
         cpu = handle_pkt.cpu;
-        handle_pkt.pf_metadata = impl_prefetcher_operate(handle_pkt.v_address & ~bitmask(match_offset_bits ? 0 : OFFSET_BITS), handle_pkt.address & ~bitmask(match_offset_bits ? 0 : OFFSET_BITS), handle_pkt.ip, 1, handle_pkt.type, handle_pkt.pf_metadata);
+        uint64_t pf_base_addr = (virtual_prefetch ? handle_pkt.v_address : handle_pkt.address) & ~bitmask(match_offset_bits ? 0 : OFFSET_BITS);
+        handle_pkt.pf_metadata = impl_prefetcher_operate(pf_base_addr, handle_pkt.ip, 1, handle_pkt.type, handle_pkt.pf_metadata);
     }
 
     return true;
@@ -308,10 +303,7 @@ bool CACHE::filllike_miss(std::size_t set, std::size_t way, PACKET &handle_pkt)
                 return false;
         }
 
-        if (ever_seen_data)
-            evicting_address = fill_block.address & ~bitmask(match_offset_bits ? 0 : OFFSET_BITS);
-        else
-            evicting_address = fill_block.v_address & ~bitmask(match_offset_bits ? 0 : OFFSET_BITS);
+        evicting_address = (virtual_prefetch ? fill_block.v_address : fill_block.address) & ~bitmask(match_offset_bits ? 0 : OFFSET_BITS);
 
         if (fill_block.prefetch && !fill_block.used)
             pf_useless++;
@@ -334,7 +326,8 @@ bool CACHE::filllike_miss(std::size_t set, std::size_t way, PACKET &handle_pkt)
 
     // update prefetcher
     cpu = handle_pkt.cpu;
-    handle_pkt.pf_metadata = impl_prefetcher_cache_fill(handle_pkt.v_address & ~bitmask(match_offset_bits ? 0 : OFFSET_BITS), handle_pkt.address & ~bitmask(match_offset_bits ? 0 : OFFSET_BITS), set, way, handle_pkt.type == PREFETCH, evicting_address, handle_pkt.pf_metadata);
+    uint64_t fill_base_addr = (virtual_prefetch ? handle_pkt.v_address : handle_pkt.address) & ~bitmask(match_offset_bits ? 0 : OFFSET_BITS);
+    handle_pkt.pf_metadata = impl_prefetcher_cache_fill(fill_base_addr, set, way, handle_pkt.type == PREFETCH, evicting_address, handle_pkt.pf_metadata);
 
     // update replacement policy
     impl_update_replacement_state(handle_pkt.cpu, set, way, handle_pkt.address, handle_pkt.ip, 0, handle_pkt.type, 0);
@@ -494,32 +487,33 @@ int CACHE::prefetch_line(uint64_t ip, uint64_t base_addr, uint64_t pf_addr, bool
 {
     pf_requested++;
 
-    if (!PQ.full()) {
-        if ((base_addr>>LOG2_PAGE_SIZE) == (pf_addr>>LOG2_PAGE_SIZE)) {
-            
-            PACKET pf_packet;
-            pf_packet.fill_level = (fill_this_level ? fill_level : lower_level->fill_level);
-	    pf_packet.pf_origin_level = fill_level;
-	    pf_packet.pf_metadata = prefetch_metadata;
-            pf_packet.cpu = cpu;
-            //pf_packet.data_index = LQ.entry[lq_index].data_index;
-            //pf_packet.lq_index = lq_index;
-            pf_packet.address = pf_addr;
-            pf_packet.v_address = 0;
-            //pf_packet.instr_id = LQ.entry[lq_index].instr_id;
-            pf_packet.ip = ip;
-            pf_packet.type = PREFETCH;
+    PACKET pf_packet;
+    pf_packet.fill_level = (fill_this_level ? fill_level : lower_level->fill_level);
+    pf_packet.pf_origin_level = fill_level;
+    pf_packet.pf_metadata = prefetch_metadata;
+    pf_packet.cpu = cpu;
+    pf_packet.v_address = virtual_prefetch ? pf_addr : 0;
+    pf_packet.address = pf_addr;
+    pf_packet.ip = ip;
+    pf_packet.type = PREFETCH;
 
-            // give a dummy 0 as the IP of a prefetch
-            add_pq(&pf_packet);
-
+    if (virtual_prefetch)
+    {
+        if (VAPQ.full())
+            return 0;
+        VAPQ.push_back(pf_packet);
+        pf_issued++;
+    }
+    else
+    {
+        int result = add_pq(&pf_packet);
+        if (result == -2)
+            return 0;
+        if (result > 0)
             pf_issued++;
-
-            return 1;
-        }
     }
 
-    return 0;
+    return 1;
 }
 
 int CACHE::kpc_prefetch_line(uint64_t base_addr, uint64_t pf_addr, bool fill_this_level, int delta, int depth, int signature, int confidence, uint32_t prefetch_metadata)
@@ -556,55 +550,19 @@ int CACHE::kpc_prefetch_line(uint64_t base_addr, uint64_t pf_addr, bool fill_thi
     return 0;
 }
 
-int CACHE::va_prefetch_line(uint64_t ip, uint64_t pf_addr, bool fill_this_level, uint32_t prefetch_metadata)
-{
-  if(pf_addr == 0)
-  {
-      std::cerr << "va_prefetch_line() pf_addr cannot be 0! exiting" << std::endl;
-      assert(0);
-  }
-
-  pf_requested++;
-  if(!VAPQ.full())
-    {
-      // generate new prefetch request packet
-      PACKET pf_packet;
-      pf_packet.fill_level = (fill_this_level ? fill_level : lower_level->fill_level);
-      pf_packet.pf_origin_level = fill_level;
-      pf_packet.pf_metadata = prefetch_metadata;
-      pf_packet.cpu = cpu;
-      pf_packet.v_address = pf_addr;
-      pf_packet.address = pf_addr; // make address == v_address before translation just so we can use VAPQ's check_queue() function
-      pf_packet.ip = ip;
-      pf_packet.type = PREFETCH;
-
-      auto vapq_entry = std::find_if(VAPQ.begin(), VAPQ.end(), eq_addr<PACKET>(pf_addr, OFFSET_BITS));
-      if(vapq_entry != VAPQ.end())
-	{
-	  // there's already a VA prefetch to this cache line
-	  return 1;
-	}
-
-      // add the packet to the virtual address space prefetching queue
-      VAPQ.push_back(pf_packet);
-      return 1;
-    }
-
-  return 0;
-}
-
 void CACHE::va_translate_prefetches()
 {
     // TEMPORARY SOLUTION: mark prefetches as translated after a fixed latency
-    if (!PQ.full() && VAPQ.has_ready())
+    if (VAPQ.has_ready())
     {
         VAPQ.front().address = vmem.va_to_pa(cpu, VAPQ.front().v_address);
 
         // move the translated prefetch over to the regular PQ
-        add_pq(&VAPQ.front());
+        int result = add_pq(&VAPQ.front());
 
         // remove the prefetch from the VAPQ
-        VAPQ.pop_front();
+        if (result != -2)
+            VAPQ.pop_front();
     }
 }
 
@@ -677,7 +635,6 @@ void CACHE::return_data(PACKET *packet)
 
     // MSHR holds the most updated information about this request
     // no need to do memcpy
-    mshr_entry->returned = true;
     mshr_entry->data = packet->data;
     mshr_entry->pf_metadata = packet->pf_metadata;
     mshr_entry->event_cycle = current_cycle + (warmup_complete[cpu] ? FILL_LATENCY : 0);
@@ -689,7 +646,8 @@ void CACHE::return_data(PACKET *packet)
             std::cout << " index: " << std::distance(MSHR.begin(), mshr_entry) << " occupancy: " << get_occupancy(0,0);
             std::cout << " event: " << mshr_entry->event_cycle << " current: " << current_cycle << std::endl; });
 
-    MSHR.sort(min_fill_index());
+    // Order this entry after previously-returned entries, but before non-returned entries
+    MSHR.splice(std::lower_bound(std::begin(MSHR), std::end(MSHR), *mshr_entry, ord_event_cycle<PACKET>()), MSHR, mshr_entry);
 }
 
 uint32_t CACHE::get_occupancy(uint8_t queue_type, uint64_t address)
