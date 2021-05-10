@@ -94,8 +94,7 @@ class CACHE : public MemoryRequestConsumer, public MemoryRequestProducer {
     void return_data(PACKET *packet),
          operate(),
          operate_writes(),
-         operate_reads(),
-         increment_WQ_FULL(uint64_t address);
+         operate_reads();
 
     uint32_t get_occupancy(uint8_t queue_type, uint64_t address),
              get_size(uint8_t queue_type, uint64_t address);
@@ -159,16 +158,6 @@ class CACHE : public MemoryRequestConsumer, public MemoryRequestProducer {
     void lru_final_stats();
 };
 
-template <>
-struct is_valid<PACKET>
-{
-    is_valid() {}
-    bool operator()(const PACKET &test)
-    {
-        return test.address != 0;
-    }
-};
-
 template <typename T>
 struct eq_full_addr
 {
@@ -181,7 +170,6 @@ struct eq_full_addr
         return validtest(test) && test.full_addr == val;
     }
 };
-
 
 #endif
 

@@ -154,7 +154,7 @@ void PageTableWalker::handle_fill()
 		
 				fill_mshr->full_addr = fill_mshr->full_v_addr;
 				fill_mshr->address = fill_mshr->full_addr >> LOG2_PAGE_SIZE;
-	
+
 				for(auto ret: fill_mshr->to_return)
 					ret->return_data(&(*fill_mshr));
 

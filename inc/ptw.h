@@ -67,7 +67,7 @@ class PageTableWalker : public MemoryRequestConsumer, public MemoryRequestProduc
 		uint32_t cpu;
 		uint8_t cache_type;
 
-		uint8_t LATENCY;
+		uint8_t LATENCY = 0;
 
 		const uint32_t VAL_PSCL5_SET, VAL_PSCL5_WAY, VAL_PSCL4_SET, VAL_PSCL4_WAY, VAL_PSCL3_SET, VAL_PSCL3_WAY, VAL_PSCL2_SET, VAL_PSCL2_WAY;
 
