@@ -26,10 +26,6 @@ class PACKET {
         confidence = 0;
 
     uint32_t pf_metadata;
-
-    std::list<LSQ_ENTRY*> lq_index_depend_on_me = {}, sq_index_depend_on_me = {};
-    std::list<champsim::circular_buffer<ooo_model_instr>::iterator> instr_depend_on_me;
-
     uint32_t cpu = NUM_CPUS;
 
     uint64_t address = 0,
@@ -42,6 +38,8 @@ class PACKET {
              event_cycle = std::numeric_limits<uint64_t>::max(),
              cycle_enqueued = 0;
 
+    std::list<LSQ_ENTRY*> lq_index_depend_on_me = {}, sq_index_depend_on_me = {};
+    std::list<champsim::circular_buffer<ooo_model_instr>::iterator> instr_depend_on_me;
     std::list<MemoryRequestProducer*> to_return;
 
 	uint8_t translation_level = 0, init_translation_level = 0; 
