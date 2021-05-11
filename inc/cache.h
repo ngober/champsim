@@ -1,6 +1,7 @@
 #ifndef CACHE_H
 #define CACHE_H
 
+#include <array>
 #include <string>
 #include <functional>
 #include <list>
@@ -32,7 +33,13 @@ class CACHE : public champsim::operable, public MemoryRequestConsumer, public Me
              pf_useful = 0,
              pf_useless = 0,
              pf_polluting = 0,
-             pf_fill = 0;
+             pf_fill = 0,
+             roi_pf_requested = 0,
+             roi_pf_issued = 0,
+             roi_pf_useful = 0,
+             roi_pf_useless = 0,
+             roi_pf_polluting = 0,
+             roi_pf_fill = 0;
 
     // queues
     champsim::delay_queue<PACKET> RQ{RQ_SIZE, HIT_LATENCY}, // read queue
@@ -42,12 +49,11 @@ class CACHE : public champsim::operable, public MemoryRequestConsumer, public Me
 
     std::list<PACKET> MSHR; // MSHR
 
-    uint64_t sim_access[NUM_CPUS][NUM_TYPES] = {},
-             sim_hit[NUM_CPUS][NUM_TYPES] = {},
-             sim_miss[NUM_CPUS][NUM_TYPES] = {},
-             roi_access[NUM_CPUS][NUM_TYPES] = {},
-             roi_hit[NUM_CPUS][NUM_TYPES] = {},
-             roi_miss[NUM_CPUS][NUM_TYPES] = {};
+    std::array<std::array<unsigned long long, NUM_TYPES>, NUM_CPUS>
+             sim_hit = {},
+             sim_miss = {},
+             roi_hit = {},
+             roi_miss = {};
 
     uint64_t RQ_ACCESS = 0,
              RQ_MERGED = 0,
@@ -94,6 +100,8 @@ class CACHE : public champsim::operable, public MemoryRequestConsumer, public Me
         impl_find_victim(std::bind(repl_find_victim, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5, std::placeholders::_6, std::placeholders::_7))
     {
     }
+
+    void reset_stats();
 
     // functions
     int  add_rq(PACKET *packet),

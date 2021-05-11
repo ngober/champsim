@@ -73,8 +73,7 @@ void CACHE::handle_writeback()
             impl_update_replacement_state(handle_pkt.cpu, set, way, fill_block.address, handle_pkt.ip, 0, handle_pkt.type, 1);
 
             // COLLECT STATS
-            sim_hit[handle_pkt.cpu][handle_pkt.type]++;
-            sim_access[handle_pkt.cpu][handle_pkt.type]++;
+            sim_hit.at(handle_pkt.cpu).at(handle_pkt.type)++;
 
             // mark dirty
             fill_block.dirty = 1;
@@ -189,8 +188,7 @@ void CACHE::readlike_hit(std::size_t set, std::size_t way, PACKET &handle_pkt)
     impl_update_replacement_state(handle_pkt.cpu, set, way, hit_block.address, handle_pkt.ip, 0, handle_pkt.type, 1);
 
     // COLLECT STATS
-    sim_hit[handle_pkt.cpu][handle_pkt.type]++;
-    sim_access[handle_pkt.cpu][handle_pkt.type]++;
+    sim_hit.at(handle_pkt.cpu).at(handle_pkt.type)++;
 
     for (auto ret : handle_pkt.to_return)
         ret->return_data(&handle_pkt);
@@ -359,8 +357,7 @@ bool CACHE::filllike_miss(std::size_t set, std::size_t way, PACKET &handle_pkt)
     impl_update_replacement_state(handle_pkt.cpu, set, way, handle_pkt.address, handle_pkt.ip, 0, handle_pkt.type, 0);
 
     // COLLECT STATS
-    sim_miss[handle_pkt.cpu][handle_pkt.type]++;
-    sim_access[handle_pkt.cpu][handle_pkt.type]++;
+    sim_miss.at(handle_pkt.cpu).at(handle_pkt.type)++;
 
     return true;
 }
@@ -731,4 +728,30 @@ void CACHE::cpu_redir_ipref_final_stats()
     ooo_cpu[cpu]->impl_prefetcher_final_stats();
 }
 
+void CACHE::reset_stats()
+{
+    for (auto &x : sim_hit)
+        std::fill(std::begin(x), std::end(x), 0);
+    for (auto &x : sim_miss)
+        std::fill(std::begin(x), std::end(x), 0);
+
+    pf_requested = 0;
+    pf_issued = 0;
+    pf_useful = 0;
+    pf_useless = 0;
+    pf_polluting = 0;
+    pf_fill = 0;
+
+    total_miss_latency = 0;
+
+    RQ_ACCESS = 0;
+    RQ_MERGED = 0;
+    RQ_TO_CACHE = 0;
+
+    WQ_ACCESS = 0;
+    WQ_MERGED = 0;
+    WQ_TO_CACHE = 0;
+    WQ_FORWARD = 0;
+    WQ_FULL = 0;
+}
 
