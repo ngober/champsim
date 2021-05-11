@@ -197,7 +197,16 @@ void CACHE::readlike_hit(std::size_t set, std::size_t way, PACKET &handle_pkt)
 
     // update prefetch stats and reset prefetch bit
     if (hit_block.prefetch) {
-        pf_useful++;
+        if (hit_block.polluting)
+        {
+            // A block that is polluting, but useful, can be considered useless instead.
+            pf_polluting--;
+            pf_useless++;
+        }
+        else
+        {
+            pf_useful++;
+        }
         hit_block.prefetch = 0;
     }
 }
@@ -305,13 +314,29 @@ bool CACHE::filllike_miss(std::size_t set, std::size_t way, PACKET &handle_pkt)
 
         evicting_address = (virtual_prefetch ? fill_block.v_address : fill_block.address) & ~bitmask(match_offset_bits ? 0 : OFFSET_BITS);
 
-        if (fill_block.prefetch)
+        // Check for a prefetch that polluted this demand
+        auto incoming_addr = handle_pkt.address;
+        auto set_begin     = std::next(std::begin(block), set*NUM_WAY);
+        auto set_end       = std::next(set_begin, NUM_WAY);
+        auto pollution     = std::find_if(set_begin, set_end, [incoming_addr](const BLOCK& x){ return x.prefetch && !x.polluting && x.evicted_addr == incoming_addr; });
+
+        // If a polluting block is found, mark it
+        if (handle_pkt.type != PREFETCH && pollution != set_end)
+        {
+            pollution->polluting = true; // this mark is needed in case the prefetch later becomes useful
+            pf_polluting++;
+        }
+
+        // If the replaced block is not already polluting, it may be useless
+        if (fill_block.prefetch && !fill_block.polluting)
             pf_useless++;
 
         if (handle_pkt.type == PREFETCH)
             pf_fill++;
 
         fill_block.valid = true;
+        fill_block.polluting = false;
+        fill_block.evicted_addr = fill_block.address;
         fill_block.prefetch = (handle_pkt.type == PREFETCH && handle_pkt.pf_origin_level == fill_level);
         fill_block.dirty = (handle_pkt.type == WRITEBACK || (handle_pkt.type == RFO && handle_pkt.to_return.empty()));
         fill_block.address = handle_pkt.address;
@@ -705,4 +730,5 @@ void CACHE::cpu_redir_ipref_final_stats()
 {
     ooo_cpu[cpu]->impl_prefetcher_final_stats();
 }
+
 
