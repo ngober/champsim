@@ -24,12 +24,6 @@ void O3_CPU::operate()
     schedule_instruction(); // schedule instructions
     handle_memory_return(); // finalize memory transactions
     operate_lsq(); // execute memory transactions
-
-    PTW->_operate();
-
-    // also handle per-cycle prefetcher operation
-    l1i_prefetcher_cycle_operate();
-
     schedule_memory_instruction(); // schedule memory transactions
     dispatch_instruction(); // dispatch
     decode_instruction(); // decode
@@ -45,7 +39,9 @@ void O3_CPU::operate()
 
 void O3_CPU::initialize_core()
 {
-
+    // BRANCH PREDICTOR & BTB
+    impl_branch_predictor_initialize();
+    impl_btb_initialize();
 }
 
 void O3_CPU::init_instruction(ooo_model_instr arch_instr)
@@ -236,17 +232,17 @@ void O3_CPU::init_instruction(ooo_model_instr arch_instr)
 
         num_branch++;
 
-	std::pair<uint64_t, uint8_t> btb_result = btb_prediction(arch_instr.ip, arch_instr.branch_type);
+	std::pair<uint64_t, uint8_t> btb_result = impl_btb_prediction(arch_instr.ip, arch_instr.branch_type);
 	uint64_t predicted_branch_target = btb_result.first;
 	uint8_t always_taken = btb_result.second;
-	uint8_t branch_prediction = predict_branch(arch_instr.ip, predicted_branch_target, always_taken, arch_instr.branch_type);
+	uint8_t branch_prediction = impl_predict_branch(arch_instr.ip, predicted_branch_target, always_taken, arch_instr.branch_type);
 	if((branch_prediction == 0) && (always_taken == 0))
 	  {
 	    predicted_branch_target = 0;
 	  }
 
         // call code prefetcher every time the branch predictor is used
-        l1i_prefetcher_branch_operate(arch_instr.ip, arch_instr.branch_type, predicted_branch_target);
+        impl_prefetcher_branch_operate(arch_instr.ip, arch_instr.branch_type, predicted_branch_target);
 
         if(predicted_branch_target != arch_instr.branch_target)
         {
@@ -269,8 +265,8 @@ void O3_CPU::init_instruction(ooo_model_instr arch_instr)
             }
         }
 
-	update_btb(arch_instr.ip, arch_instr.branch_target, arch_instr.branch_taken, arch_instr.branch_type);
-        last_branch_result(arch_instr.ip, arch_instr.branch_target, arch_instr.branch_taken, arch_instr.branch_type);
+        impl_update_btb(arch_instr.ip, arch_instr.branch_target, arch_instr.branch_taken, arch_instr.branch_type);
+        impl_last_branch_result(arch_instr.ip, arch_instr.branch_target, arch_instr.branch_taken, arch_instr.branch_type);
     }
 
     arch_instr.event_cycle = current_cycle;
@@ -348,11 +344,10 @@ void O3_CPU::do_translate_fetch(champsim::circular_buffer<ooo_model_instr>::iter
     // begin process of fetching this instruction by sending it to the ITLB
     // add it to the ITLB's read queue
     PACKET trace_packet;
-    trace_packet.fill_level = FILL_L1;
+    trace_packet.fill_level = ITLB_bus.lower_level->fill_level;
     trace_packet.cpu = cpu;
-    trace_packet.address = begin->ip >> LOG2_PAGE_SIZE;
-    trace_packet.full_addr = begin->ip;
-    trace_packet.full_v_addr = begin->ip;
+    trace_packet.address = begin->ip;
+    trace_packet.v_address = begin->ip;
     trace_packet.instr_id = begin->instr_id;
     trace_packet.ip = begin->ip;
     trace_packet.type = LOAD;
@@ -403,13 +398,11 @@ void O3_CPU::do_fetch_instruction(champsim::circular_buffer<ooo_model_instr>::it
 {
     // add it to the L1-I's read queue
     PACKET fetch_packet;
-    fetch_packet.fill_level = FILL_L1;
+    fetch_packet.fill_level = L1I_bus.lower_level->fill_level;
     fetch_packet.cpu = cpu;
-    fetch_packet.address = begin->instruction_pa >> LOG2_BLOCK_SIZE;
+    fetch_packet.address = begin->instruction_pa;
     fetch_packet.data = begin->instruction_pa;
-    fetch_packet.full_addr = begin->instruction_pa;
-    fetch_packet.v_address = begin->ip >> LOG2_PAGE_SIZE;
-    fetch_packet.full_v_addr = begin->ip;
+    fetch_packet.v_address = begin->ip;
     fetch_packet.instr_id = begin->instr_id;
     fetch_packet.ip = begin->ip;
     fetch_packet.type = LOAD; 
@@ -865,14 +858,10 @@ int O3_CPU::do_translate_store(LSQ_ENTRY *sq_it)
 {
     PACKET data_packet;
 
-    data_packet.fill_level = FILL_L1;
+    data_packet.fill_level = DTLB_bus.lower_level->fill_level;
     data_packet.cpu = cpu;
-    if (knob_cloudsuite)
-        data_packet.address = splice_bits(sq_it->virtual_address, sq_it->asid[1], LOG2_PAGE_SIZE);
-    else
-        data_packet.address = sq_it->virtual_address >> LOG2_PAGE_SIZE;
-    data_packet.full_addr = sq_it->virtual_address;
-    data_packet.full_v_addr = sq_it->virtual_address;
+    data_packet.address = sq_it->virtual_address;
+    data_packet.v_address = sq_it->virtual_address;
     data_packet.instr_id = sq_it->instr_id;
     data_packet.ip = sq_it->ip;
     data_packet.type = RFO;
@@ -929,14 +918,10 @@ void O3_CPU::execute_store(LSQ_ENTRY *sq_it)
 int O3_CPU::do_translate_load(LSQ_ENTRY *lq_it)
 {
     PACKET data_packet;
-    data_packet.fill_level = FILL_L1;
+    data_packet.fill_level = DTLB_bus.lower_level->fill_level;
     data_packet.cpu = cpu;
-    if (knob_cloudsuite)
-        data_packet.address = splice_bits(lq_it->virtual_address, lq_it->asid[1], LOG2_PAGE_SIZE);
-    else
-        data_packet.address = lq_it->virtual_address >> LOG2_PAGE_SIZE;
-    data_packet.full_addr = lq_it->virtual_address;
-    data_packet.full_v_addr = lq_it->virtual_address;
+    data_packet.address = lq_it->virtual_address;
+    data_packet.v_address = lq_it->virtual_address;
     data_packet.instr_id = lq_it->instr_id;
     data_packet.ip = lq_it->ip;
     data_packet.type = LOAD;
@@ -960,12 +945,10 @@ int O3_CPU::execute_load(LSQ_ENTRY *lq_it)
 {
     // add it to L1D
     PACKET data_packet;
-    data_packet.fill_level = FILL_L1;
+    data_packet.fill_level = L1D_bus.lower_level->fill_level;
     data_packet.cpu = cpu;
-    data_packet.address = lq_it->physical_address >> LOG2_BLOCK_SIZE;
-    data_packet.full_addr = lq_it->physical_address;
-    data_packet.v_address = lq_it->virtual_address >> LOG2_BLOCK_SIZE;
-    data_packet.full_v_addr = lq_it->virtual_address;
+    data_packet.address = lq_it->physical_address;
+    data_packet.v_address = lq_it->virtual_address;
     data_packet.instr_id = lq_it->instr_id;
     data_packet.ip = lq_it->ip;
     data_packet.type = LOAD;
@@ -1062,9 +1045,9 @@ void O3_CPU::handle_memory_return()
       while (available_fetch_bandwidth > 0 && !itlb_entry.instr_depend_on_me.empty())
       {
           auto it = itlb_entry.instr_depend_on_me.front();
-          if ((it->ip >> LOG2_PAGE_SIZE) == (itlb_entry.address) && it->translated != 0)
+          if ((it->ip >> LOG2_PAGE_SIZE) == (itlb_entry.address >> LOG2_PAGE_SIZE) && it->translated != 0)
           {
-              if ((it->ip >> LOG2_PAGE_SIZE) == (itlb_entry.address) && it->translated != 0)
+              //if ((it->ip >> LOG2_PAGE_SIZE) == (itlb_entry.address >> LOG2_PAGE_SIZE) && it->translated != 0)
               {
                   it->translated = COMPLETED;
                   // recalculate a physical address for this cache line based on the translated physical page address
@@ -1097,7 +1080,7 @@ void O3_CPU::handle_memory_return()
       while (available_fetch_bandwidth > 0 && !l1i_entry.instr_depend_on_me.empty())
       {
           auto it = l1i_entry.instr_depend_on_me.front();
-          if ((it->instruction_pa >> LOG2_BLOCK_SIZE) == (l1i_entry.address) && it->fetched != 0 && it->translated == COMPLETED)
+          if ((it->instruction_pa >> LOG2_BLOCK_SIZE) == (l1i_entry.address >> LOG2_BLOCK_SIZE) && it->fetched != 0 && it->translated == COMPLETED)
           {
               it->fetched = COMPLETED;
               available_fetch_bandwidth--;
@@ -1182,12 +1165,10 @@ void O3_CPU::retire_rob()
 
                 // sq_index and rob_index are no longer available after retirement
                 // but we pass this information to avoid segmentation fault
-                data_packet.fill_level = FILL_L1;
+                data_packet.fill_level = L1D_bus.lower_level->fill_level;
                 data_packet.cpu = cpu;
-                data_packet.address = sq_it->physical_address >> LOG2_BLOCK_SIZE;
-                data_packet.full_addr = sq_it->physical_address;
-                data_packet.v_address = sq_it->virtual_address >> LOG2_BLOCK_SIZE;
-                data_packet.full_v_addr = sq_it->virtual_address;
+                data_packet.address = sq_it->physical_address;
+                data_packet.v_address = sq_it->virtual_address;
                 data_packet.instr_id = sq_it->instr_id;
                 data_packet.ip = sq_it->ip;
                 data_packet.type = RFO;

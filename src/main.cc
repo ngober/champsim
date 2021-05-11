@@ -29,11 +29,11 @@ uint64_t warmup_instructions     = 1000000,
 
 time_t start_time;
 
-extern CACHE LLC;
 extern MEMORY_CONTROLLER DRAM;
 extern VirtualMemory vmem;
 extern std::array<O3_CPU*, NUM_CPUS> ooo_cpu;
-extern std::array<champsim::operable*, 7*NUM_CPUS+2> operables;
+extern std::array<CACHE*, NUM_CACHES> caches;
+extern std::array<champsim::operable*, NUM_OPERABLES> operables;
 
 std::vector<tracereader*> traces;
 
@@ -56,32 +56,35 @@ void print_roi_stats(uint32_t cpu, CACHE *cache)
         TOTAL_MISS += cache->roi_miss[cpu][i];
     }
 
-    cout << cache->NAME;
-    cout << " TOTAL     ACCESS: " << setw(10) << TOTAL_ACCESS << "  HIT: " << setw(10) << TOTAL_HIT << "  MISS: " << setw(10) << TOTAL_MISS << endl;
+    if (TOTAL_ACCESS > 0)
+    {
+        cout << cache->NAME;
+        cout << " TOTAL     ACCESS: " << setw(10) << TOTAL_ACCESS << "  HIT: " << setw(10) << TOTAL_HIT << "  MISS: " << setw(10) << TOTAL_MISS << endl;
 
-    cout << cache->NAME;
-    cout << " LOAD      ACCESS: " << setw(10) << cache->roi_access[cpu][0] << "  HIT: " << setw(10) << cache->roi_hit[cpu][0] << "  MISS: " << setw(10) << cache->roi_miss[cpu][0] << endl;
+        cout << cache->NAME;
+        cout << " LOAD      ACCESS: " << setw(10) << cache->roi_access[cpu][0] << "  HIT: " << setw(10) << cache->roi_hit[cpu][0] << "  MISS: " << setw(10) << cache->roi_miss[cpu][0] << endl;
 
-    cout << cache->NAME;
-    cout << " RFO       ACCESS: " << setw(10) << cache->roi_access[cpu][1] << "  HIT: " << setw(10) << cache->roi_hit[cpu][1] << "  MISS: " << setw(10) << cache->roi_miss[cpu][1] << endl;
+        cout << cache->NAME;
+        cout << " RFO       ACCESS: " << setw(10) << cache->roi_access[cpu][1] << "  HIT: " << setw(10) << cache->roi_hit[cpu][1] << "  MISS: " << setw(10) << cache->roi_miss[cpu][1] << endl;
 
-    cout << cache->NAME;
-    cout << " PREFETCH  ACCESS: " << setw(10) << cache->roi_access[cpu][2] << "  HIT: " << setw(10) << cache->roi_hit[cpu][2] << "  MISS: " << setw(10) << cache->roi_miss[cpu][2] << endl;
+        cout << cache->NAME;
+        cout << " PREFETCH  ACCESS: " << setw(10) << cache->roi_access[cpu][2] << "  HIT: " << setw(10) << cache->roi_hit[cpu][2] << "  MISS: " << setw(10) << cache->roi_miss[cpu][2] << endl;
 
-    cout << cache->NAME;
-    cout << " WRITEBACK ACCESS: " << setw(10) << cache->roi_access[cpu][3] << "  HIT: " << setw(10) << cache->roi_hit[cpu][3] << "  MISS: " << setw(10) << cache->roi_miss[cpu][3] << endl;
+        cout << cache->NAME;
+        cout << " WRITEBACK ACCESS: " << setw(10) << cache->roi_access[cpu][3] << "  HIT: " << setw(10) << cache->roi_hit[cpu][3] << "  MISS: " << setw(10) << cache->roi_miss[cpu][3] << endl;
 
-	cout << cache->NAME;
-    cout << " TRANSLATION ACCESS: " << setw(10) << cache->roi_access[cpu][4] << "  HIT: " << setw(10) << cache->roi_hit[cpu][4] << "  MISS: " << setw(10) << cache->roi_miss[cpu][4] << endl;
+        cout << cache->NAME;
+        cout << " TRANSLATION ACCESS: " << setw(10) << cache->roi_access[cpu][4] << "  HIT: " << setw(10) << cache->roi_hit[cpu][4] << "  MISS: " << setw(10) << cache->roi_miss[cpu][4] << endl;
 
 
-    cout << cache->NAME;
-    cout << " PREFETCH  REQUESTED: " << setw(10) << cache->pf_requested << "  ISSUED: " << setw(10) << cache->pf_issued;
-    cout << "  USEFUL: " << setw(10) << cache->pf_useful << "  USELESS: " << setw(10) << cache->pf_useless << endl;
+        cout << cache->NAME;
+        cout << " PREFETCH  REQUESTED: " << setw(10) << cache->pf_requested << "  ISSUED: " << setw(10) << cache->pf_issued;
+        cout << "  USEFUL: " << setw(10) << cache->pf_useful << "  USELESS: " << setw(10) << cache->pf_useless << endl;
 
-    cout << cache->NAME;
-    cout << " AVERAGE MISS LATENCY: " << (1.0*(cache->total_miss_latency))/TOTAL_MISS << " cycles" << endl;
-    //cout << " AVERAGE MISS LATENCY: " << (cache->total_miss_latency)/TOTAL_MISS << " cycles " << cache->total_miss_latency << "/" << TOTAL_MISS<< endl;
+        cout << cache->NAME;
+        cout << " AVERAGE MISS LATENCY: " << (1.0*(cache->total_miss_latency))/TOTAL_MISS << " cycles" << endl;
+        //cout << " AVERAGE MISS LATENCY: " << (cache->total_miss_latency)/TOTAL_MISS << " cycles " << cache->total_miss_latency << "/" << TOTAL_MISS<< endl;
+    }
 }
 
 void print_sim_stats(uint32_t cpu, CACHE *cache)
@@ -94,20 +97,23 @@ void print_sim_stats(uint32_t cpu, CACHE *cache)
         TOTAL_MISS += cache->sim_miss[cpu][i];
     }
 
-    cout << cache->NAME;
-    cout << " TOTAL     ACCESS: " << setw(10) << TOTAL_ACCESS << "  HIT: " << setw(10) << TOTAL_HIT << "  MISS: " << setw(10) << TOTAL_MISS << endl;
+    if (TOTAL_ACCESS > 0)
+    {
+        cout << cache->NAME;
+        cout << " TOTAL     ACCESS: " << setw(10) << TOTAL_ACCESS << "  HIT: " << setw(10) << TOTAL_HIT << "  MISS: " << setw(10) << TOTAL_MISS << endl;
 
-    cout << cache->NAME;
-    cout << " LOAD      ACCESS: " << setw(10) << cache->sim_access[cpu][0] << "  HIT: " << setw(10) << cache->sim_hit[cpu][0] << "  MISS: " << setw(10) << cache->sim_miss[cpu][0] << endl;
+        cout << cache->NAME;
+        cout << " LOAD      ACCESS: " << setw(10) << cache->sim_access[cpu][0] << "  HIT: " << setw(10) << cache->sim_hit[cpu][0] << "  MISS: " << setw(10) << cache->sim_miss[cpu][0] << endl;
 
-    cout << cache->NAME;
-    cout << " RFO       ACCESS: " << setw(10) << cache->sim_access[cpu][1] << "  HIT: " << setw(10) << cache->sim_hit[cpu][1] << "  MISS: " << setw(10) << cache->sim_miss[cpu][1] << endl;
+        cout << cache->NAME;
+        cout << " RFO       ACCESS: " << setw(10) << cache->sim_access[cpu][1] << "  HIT: " << setw(10) << cache->sim_hit[cpu][1] << "  MISS: " << setw(10) << cache->sim_miss[cpu][1] << endl;
 
-    cout << cache->NAME;
-    cout << " PREFETCH  ACCESS: " << setw(10) << cache->sim_access[cpu][2] << "  HIT: " << setw(10) << cache->sim_hit[cpu][2] << "  MISS: " << setw(10) << cache->sim_miss[cpu][2] << endl;
+        cout << cache->NAME;
+        cout << " PREFETCH  ACCESS: " << setw(10) << cache->sim_access[cpu][2] << "  HIT: " << setw(10) << cache->sim_hit[cpu][2] << "  MISS: " << setw(10) << cache->sim_miss[cpu][2] << endl;
 
-    cout << cache->NAME;
-    cout << " WRITEBACK ACCESS: " << setw(10) << cache->sim_access[cpu][3] << "  HIT: " << setw(10) << cache->sim_hit[cpu][3] << "  MISS: " << setw(10) << cache->sim_miss[cpu][3] << endl;
+        cout << cache->NAME;
+        cout << " WRITEBACK ACCESS: " << setw(10) << cache->sim_access[cpu][3] << "  HIT: " << setw(10) << cache->sim_hit[cpu][3] << "  MISS: " << setw(10) << cache->sim_miss[cpu][3] << endl;
+    }
 }
 
 void print_branch_stats()
@@ -228,14 +234,8 @@ void finish_warmup()
 	    ooo_cpu[i]->branch_type_misses[j] = 0;
 	  }
 	
-        reset_cache_stats(i, static_cast<CACHE*>(ooo_cpu[i]->L1I_bus.lower_level));
-        reset_cache_stats(i, static_cast<CACHE*>(ooo_cpu[i]->L1D_bus.lower_level));
-        reset_cache_stats(i, static_cast<CACHE*>(static_cast<CACHE*>(ooo_cpu[i]->L1D_bus.lower_level)->lower_level)); //L2C
-
-        reset_cache_stats(i, static_cast<CACHE*>(ooo_cpu[i]->ITLB_bus.lower_level));
-        reset_cache_stats(i, static_cast<CACHE*>(ooo_cpu[i]->DTLB_bus.lower_level));
-        reset_cache_stats(i, static_cast<CACHE*>(static_cast<CACHE*>(ooo_cpu[i]->DTLB_bus.lower_level)->lower_level)); //L2C
-        reset_cache_stats(i, &LLC);
+        for (auto it = caches.rbegin(); it != caches.rend(); ++it)
+            reset_cache_stats(i, *it);
     }
     cout << endl;
 
@@ -276,7 +276,7 @@ void print_deadlock(uint32_t i)
     std::size_t j = 0;
     for (PACKET &entry : static_cast<CACHE*>(ooo_cpu[i]->L1D_bus.lower_level)->MSHR) {
         std::cout << "[L1D MSHR] entry: " << j << " instr_id: " << entry.instr_id;
-        std::cout << " address: " << std::hex << entry.address << " full_addr: " << entry.full_addr << std::dec << " type: " << +entry.type;
+        std::cout << " address: " << std::hex << (entry.address >> LOG2_BLOCK_SIZE) << " full_addr: " << entry.address << std::dec << " type: " << +entry.type;
         std::cout << " fill_level: " << entry.fill_level << " event_cycle: " << entry.event_cycle << std::endl;
         ++j;
     }
@@ -288,16 +288,6 @@ void signal_handler(int signal)
 {
 	cout << "Caught signal: " << signal << endl;
 	exit(1);
-}
-
-void cpu_l1i_prefetcher_cache_operate(uint32_t cpu_num, uint64_t v_addr, uint8_t cache_hit, uint8_t prefetch_hit)
-{
-  ooo_cpu[cpu_num]->l1i_prefetcher_cache_operate(v_addr, cache_hit, prefetch_hit);
-}
-
-void cpu_l1i_prefetcher_cache_fill(uint32_t cpu_num, uint64_t addr, uint32_t set, uint32_t way, uint8_t prefetch, uint64_t evicted_addr)
-{
-  ooo_cpu[cpu_num]->l1i_prefetcher_cache_fill(addr, set, way, prefetch, evicted_addr);
 }
 
 int main(int argc, char** argv)
@@ -369,8 +359,8 @@ int main(int argc, char** argv)
     cout << "Simulation Instructions: " << simulation_instructions << endl;
     //cout << "Scramble Loads: " << (knob_scramble_loads ? "ture" : "false") << endl;
     cout << "Number of CPUs: " << NUM_CPUS << endl;
-    cout << "LLC sets: " << LLC.NUM_SET << endl;
-    cout << "LLC ways: " << LLC.NUM_WAY << endl;
+    //cout << "LLC sets: " << LLC.NUM_SET << endl;
+    //cout << "LLC ways: " << LLC.NUM_WAY << endl;
 
     long long int dram_size = DRAM_CHANNELS * DRAM_RANKS * DRAM_BANKS * DRAM_ROWS * DRAM_COLUMNS * DRAM_LINES_PER_COLUMN * BLOCK_SIZE / 1024 / 1024; // in MiB
     std::cout << "Off-chip DRAM Size: ";
@@ -430,22 +420,17 @@ int main(int argc, char** argv)
     srand(seed_number);
     champsim_seed = seed_number;
 
-    for (int i=0; i<NUM_CPUS; i++) {
-        static_cast<CACHE*>(ooo_cpu.at(i)->L1I_bus.lower_level)->l1i_prefetcher_cache_operate = cpu_l1i_prefetcher_cache_operate;
-        static_cast<CACHE*>(ooo_cpu.at(i)->L1I_bus.lower_level)->l1i_prefetcher_cache_fill = cpu_l1i_prefetcher_cache_fill;
+    // SHARED CACHE
+    for (O3_CPU* cpu : ooo_cpu)
+    {
+        cpu->initialize_core();
     }
 
-    // SHARED CACHE
-    LLC.cache_type = IS_LLC;
-    LLC.fill_level = FILL_LLC;
-
-    using namespace std::placeholders;
-    LLC.find_victim = std::bind(&CACHE::llc_find_victim, &LLC, _1, _2, _3, _4, _5, _6, _7);
-    LLC.update_replacement_state = std::bind(&CACHE::llc_update_replacement_state, &LLC, _1, _2, _3, _4, _5, _6, _7, _8);
-    LLC.replacement_final_stats = std::bind(&CACHE::lru_final_stats, &LLC);
-
-    LLC.llc_initialize_replacement();
-    LLC.llc_prefetcher_initialize();
+    for (auto it = caches.rbegin(); it != caches.rend(); ++it)
+    {
+        (*it)->impl_prefetcher_initialize();
+        (*it)->impl_replacement_initialize();
+    }
 
     // simulation entry point
     start_time = time(NULL);
@@ -510,14 +495,8 @@ int main(int argc, char** argv)
                 cout << " cumulative IPC: " << ((float) ooo_cpu[i]->finish_sim_instr / ooo_cpu[i]->finish_sim_cycle);
                 cout << " (Simulation time: " << elapsed_hour << " hr " << elapsed_minute << " min " << elapsed_second << " sec) " << endl;
 
-                record_roi_stats(i, static_cast<CACHE*>(ooo_cpu[i]->L1D_bus.lower_level));
-                record_roi_stats(i, static_cast<CACHE*>(ooo_cpu[i]->L1I_bus.lower_level));
-                record_roi_stats(i, static_cast<CACHE*>(static_cast<CACHE*>(ooo_cpu[i]->L1D_bus.lower_level)->lower_level));
-                record_roi_stats(i, &LLC);
-
-                record_roi_stats(i, static_cast<CACHE*>(ooo_cpu[i]->DTLB_bus.lower_level));
-                record_roi_stats(i, static_cast<CACHE*>(ooo_cpu[i]->ITLB_bus.lower_level));
-                record_roi_stats(i, static_cast<CACHE*>(static_cast<CACHE*>(ooo_cpu[i]->DTLB_bus.lower_level)->lower_level));
+                for (auto it = caches.rbegin(); it != caches.rend(); ++it)
+                    record_roi_stats(i, *it);
             }
         }
     }
@@ -534,46 +513,26 @@ int main(int argc, char** argv)
         for (uint32_t i=0; i<NUM_CPUS; i++) {
             cout << endl << "CPU " << i << " cumulative IPC: " << (float) (ooo_cpu[i]->num_retired - ooo_cpu[i]->begin_sim_instr) / (ooo_cpu[i]->current_cycle - ooo_cpu[i]->begin_sim_cycle); 
             cout << " instructions: " << ooo_cpu[i]->num_retired - ooo_cpu[i]->begin_sim_instr << " cycles: " << ooo_cpu[i]->current_cycle - ooo_cpu[i]->begin_sim_cycle << endl;
-#ifndef CRC2_COMPILE
-            print_sim_stats(i, static_cast<CACHE*>(ooo_cpu[i]->L1D_bus.lower_level));
-            print_sim_stats(i, static_cast<CACHE*>(ooo_cpu[i]->L1I_bus.lower_level));
-            print_sim_stats(i, static_cast<CACHE*>(static_cast<CACHE*>(ooo_cpu[i]->L1D_bus.lower_level)->lower_level));
-	    ooo_cpu[i]->l1i_prefetcher_final_stats();
-            static_cast<CACHE*>(ooo_cpu[i]->L1D_bus.lower_level)->l1d_prefetcher_final_stats();
-	    static_cast<CACHE*>(static_cast<CACHE*>(ooo_cpu[i]->L1D_bus.lower_level)->lower_level)->l2c_prefetcher_final_stats();
-#endif
-            print_sim_stats(i, &LLC);
+            for (auto it = caches.rbegin(); it != caches.rend(); ++it)
+                print_sim_stats(i, *it);
         }
-        LLC.llc_prefetcher_final_stats();
     }
 
     cout << endl << "Region of Interest Statistics" << endl;
     for (uint32_t i=0; i<NUM_CPUS; i++) {
         cout << endl << "CPU " << i << " cumulative IPC: " << ((float) ooo_cpu[i]->finish_sim_instr / ooo_cpu[i]->finish_sim_cycle); 
         cout << " instructions: " << ooo_cpu[i]->finish_sim_instr << " cycles: " << ooo_cpu[i]->finish_sim_cycle << endl;
-#ifndef CRC2_COMPILE
-        print_roi_stats(i, static_cast<CACHE*>(ooo_cpu[i]->L1D_bus.lower_level));
-        print_roi_stats(i, static_cast<CACHE*>(ooo_cpu[i]->L1I_bus.lower_level));
-        print_roi_stats(i, static_cast<CACHE*>(static_cast<CACHE*>(ooo_cpu[i]->L1D_bus.lower_level)->lower_level));
-
-        print_roi_stats(i, static_cast<CACHE*>(ooo_cpu[i]->DTLB_bus.lower_level));
-        print_roi_stats(i, static_cast<CACHE*>(ooo_cpu[i]->ITLB_bus.lower_level));
-        print_roi_stats(i, static_cast<CACHE*>(static_cast<CACHE*>(ooo_cpu[i]->DTLB_bus.lower_level)->lower_level));
-#endif
-        print_roi_stats(i, &LLC);
-        //cout << "Major fault: " << major_fault[i] << " Minor fault: " << minor_fault[i] << endl;
+        for (auto it = caches.rbegin(); it != caches.rend(); ++it)
+            print_roi_stats(i, *it);
     }
 
-    for (uint32_t i=0; i<NUM_CPUS; i++) {
-        ooo_cpu[i]->l1i_prefetcher_final_stats();
-        static_cast<CACHE*>(ooo_cpu[i]->L1D_bus.lower_level)->l1d_prefetcher_final_stats();
-        static_cast<CACHE*>(static_cast<CACHE*>(ooo_cpu[i]->L1D_bus.lower_level)->lower_level)->l2c_prefetcher_final_stats();
-    }
+    for (auto it = caches.rbegin(); it != caches.rend(); ++it)
+        (*it)->impl_prefetcher_final_stats();
 
-    LLC.llc_prefetcher_final_stats();
+    for (auto it = caches.rbegin(); it != caches.rend(); ++it)
+        (*it)->impl_replacement_final_stats();
 
 #ifndef CRC2_COMPILE
-    LLC.llc_replacement_final_stats();
     print_dram_stats();
     print_branch_stats();
 #endif

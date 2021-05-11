@@ -96,74 +96,41 @@ class O3_CPU : public champsim::operable {
             unsigned fetch_width, unsigned decode_width, unsigned dispatch_width, unsigned schedule_width,
             unsigned execute_width, unsigned lq_width, unsigned sq_width, unsigned retire_width,
             unsigned mispredict_penalty, unsigned decode_latency, unsigned dispatch_latency, unsigned schedule_latency, unsigned execute_latency,
-            CACHE *itlb, CACHE *dtlb, CACHE *l1i, CACHE *l1d, PageTableWalker *ptw) :
+            CACHE *itlb, CACHE *dtlb, CACHE *l1i, CACHE *l1d, PageTableWalker *ptw,
+            std::function<void(O3_CPU*)> bpred_initialize,
+            std::function<void(O3_CPU*, uint64_t, uint64_t, uint8_t, uint8_t)> bpred_last_branch_result,
+            std::function<uint8_t(O3_CPU*, uint64_t, uint64_t, uint8_t, uint8_t)> bpred_predict_branch,
+            std::function<void(O3_CPU*)> btb_initialize,
+            std::function<void(O3_CPU*, uint64_t, uint64_t, uint8_t, uint8_t)> update_btb,
+            std::function<std::pair<uint64_t, uint8_t>(O3_CPU*, uint64_t, uint8_t)> btb_prediction,
+            std::function<void(O3_CPU*)> prefetcher_initialize,
+            std::function<void(O3_CPU*, uint64_t, uint8_t, uint64_t)> prefetcher_branch_operate,
+            std::function<uint32_t(O3_CPU*, uint64_t, uint8_t, uint8_t, uint32_t)> prefetcher_cache_operate,
+            std::function<uint32_t(O3_CPU*, uint64_t, uint32_t, uint32_t, uint8_t, uint64_t, uint32_t)> prefetcher_cache_fill,
+            std::function<void(O3_CPU*)> prefetcher_cycle_operate,
+            std::function<void(O3_CPU*)> prefetcher_final_stats
+            ) :
         champsim::operable(freq_scale), cpu(cpu), dib_set(dib_set), dib_way(dib_way), dib_window(dib_window),
         IFETCH_BUFFER(ifetch_buffer_size), DISPATCH_BUFFER(dispatch_buffer_size, dispatch_latency), DECODE_BUFFER(decode_buffer_size, decode_latency),
         ROB("ROB", rob_size), LQ("LQ", lq_size), SQ("SQ", sq_size),
         FETCH_WIDTH(fetch_width), DECODE_WIDTH(decode_width), DISPATCH_WIDTH(dispatch_width), SCHEDULER_SIZE(schedule_width),
         EXEC_WIDTH(execute_width), LQ_WIDTH(lq_width), SQ_WIDTH(sq_width), RETIRE_WIDTH(retire_width),
         BRANCH_MISPREDICT_PENALTY(mispredict_penalty), SCHEDULING_LATENCY(schedule_latency), EXEC_LATENCY(execute_latency),
-        ITLB_bus(rob_size, itlb), DTLB_bus(rob_size, dtlb), L1I_bus(rob_size, l1i), L1D_bus(rob_size, l1d), PTW(ptw)
+        ITLB_bus(rob_size, itlb), DTLB_bus(rob_size, dtlb), L1I_bus(rob_size, l1i), L1D_bus(rob_size, l1d), PTW(ptw),
+        impl_branch_predictor_initialize(std::bind(bpred_initialize, this)),
+        impl_last_branch_result(std::bind(bpred_last_branch_result, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4)),
+        impl_predict_branch(std::bind(bpred_predict_branch, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4)),
+        impl_btb_initialize(std::bind(btb_initialize, this)),
+        impl_update_btb(std::bind(update_btb, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4)),
+        impl_btb_prediction(std::bind(btb_prediction, this, std::placeholders::_1, std::placeholders::_2)),
+        impl_prefetcher_initialize(std::bind(prefetcher_initialize, this)),
+        impl_prefetcher_branch_operate(std::bind(prefetcher_branch_operate, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3)),
+        impl_prefetcher_cache_operate(std::bind(prefetcher_cache_operate, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4)),
+        impl_prefetcher_cache_fill(std::bind(prefetcher_cache_fill, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5, std::placeholders::_6)),
+        impl_prefetcher_cycle_operate(std::bind(prefetcher_cycle_operate, this)),
+        impl_prefetcher_final_stats(std::bind(prefetcher_final_stats, this))
     {
-        // BRANCH PREDICTOR & BTB
-        initialize_branch_predictor();
-	initialize_btb();
-
-        // TLBs
-        itlb->cpu = this->cpu;
-        itlb->cache_type = IS_ITLB;
-        itlb->fill_level = FILL_L1;
-
-        dtlb->cpu = this->cpu;
-        dtlb->cache_type = IS_DTLB;
-        dtlb->fill_level = FILL_L1;
-
-        static_cast<CACHE*>(dtlb->lower_level)->cpu = this->cpu;
-        static_cast<CACHE*>(dtlb->lower_level)->cache_type = IS_STLB;
-        static_cast<CACHE*>(dtlb->lower_level)->fill_level = FILL_L2;
-
         ptw->cpu = this->cpu;
-        ptw->cache_type = IS_PTW;
-
-        // PRIVATE CACHE
-        l1i->cpu = this->cpu;
-        l1i->cache_type = IS_L1I;
-        l1i->fill_level = FILL_L1;
-
-        l1d->cpu = this->cpu;
-        l1d->cache_type = IS_L1D;
-        l1d->fill_level = FILL_L1;
-
-        static_cast<CACHE*>(l1d->lower_level)->cpu = this->cpu;
-        static_cast<CACHE*>(l1d->lower_level)->cache_type = IS_L2C;
-        static_cast<CACHE*>(l1d->lower_level)->fill_level = FILL_L2;
-
-        l1i_prefetcher_initialize();
-        l1d->l1d_prefetcher_initialize();
-        static_cast<CACHE*>(l1d->lower_level)->l2c_prefetcher_initialize();
-
-        using namespace std::placeholders;
-
-        itlb->find_victim = std::bind(&CACHE::lru_victim, itlb, _1, _2, _3, _4, _5, _6, _7);
-        dtlb->find_victim = std::bind(&CACHE::lru_victim, dtlb, _1, _2, _3, _4, _5, _6, _7);
-        static_cast<CACHE*>(dtlb->lower_level)->find_victim = std::bind(&CACHE::lru_victim, static_cast<CACHE*>(dtlb->lower_level), _1, _2, _3, _4, _5, _6, _7);
-        l1i->find_victim = std::bind(&CACHE::lru_victim, l1i, _1, _2, _3, _4, _5, _6, _7);
-        l1d->find_victim = std::bind(&CACHE::lru_victim, l1d, _1, _2, _3, _4, _5, _6, _7);
-        static_cast<CACHE*>(l1d->lower_level)->find_victim = std::bind(&CACHE::lru_victim, static_cast<CACHE*>(l1d->lower_level), _1, _2, _3, _4, _5, _6, _7);
-
-        itlb->update_replacement_state = std::bind(&CACHE::lru_update, itlb, _2, _3, _7, _8);
-        dtlb->update_replacement_state = std::bind(&CACHE::lru_update, dtlb, _2, _3, _7, _8);
-        static_cast<CACHE*>(dtlb->lower_level)->update_replacement_state = std::bind(&CACHE::lru_update, static_cast<CACHE*>(dtlb->lower_level), _2, _3, _7, _8);
-        l1i->update_replacement_state = std::bind(&CACHE::lru_update, l1i, _2, _3, _7, _8);
-        l1d->update_replacement_state = std::bind(&CACHE::lru_update, l1d, _2, _3, _7, _8);
-        static_cast<CACHE*>(l1d->lower_level)->update_replacement_state = std::bind(&CACHE::lru_update, static_cast<CACHE*>(l1d->lower_level), _2, _3, _7, _8);
-
-        itlb->replacement_final_stats = std::bind(&CACHE::lru_final_stats, itlb);
-        dtlb->replacement_final_stats = std::bind(&CACHE::lru_final_stats, dtlb);
-        static_cast<CACHE*>(dtlb->lower_level)->replacement_final_stats = std::bind(&CACHE::lru_final_stats, static_cast<CACHE*>(dtlb->lower_level));
-        l1i->replacement_final_stats = std::bind(&CACHE::lru_final_stats, l1i);
-        l1d->replacement_final_stats = std::bind(&CACHE::lru_final_stats, l1d);
-        static_cast<CACHE*>(l1d->lower_level)->replacement_final_stats = std::bind(&CACHE::lru_final_stats, static_cast<CACHE*>(l1d->lower_level));
     }
 
     void operate();
@@ -209,24 +176,28 @@ class O3_CPU : public champsim::operable {
 
     uint32_t check_and_add_lsq(uint32_t rob_index);
 
-  // branch predictor
-  uint8_t predict_branch(uint64_t ip, uint64_t predicted_target, uint8_t always_taken, uint8_t branch_type);
-  void initialize_branch_predictor(),
-    last_branch_result(uint64_t ip, uint64_t branch_target, uint8_t taken, uint8_t branch_type);
+    // branch predictor
+    const std::function<void()> impl_branch_predictor_initialize;
+    const std::function<void(uint64_t, uint64_t, uint8_t, uint8_t)> impl_last_branch_result;
+    const std::function<uint8_t(uint64_t, uint64_t, uint8_t, uint8_t)> impl_predict_branch;
 
-  // btb
-  std::pair<uint64_t, uint8_t> btb_prediction(uint64_t ip, uint8_t branch_type);
-  void initialize_btb(),
-    update_btb(uint64_t ip, uint64_t branch_target, uint8_t taken, uint8_t branch_type);
+    // btb
+    const std::function<void()> impl_btb_initialize;
+    const std::function<void(uint64_t, uint64_t, uint8_t, uint8_t)> impl_update_btb;
+    const std::function<std::pair<uint64_t, uint8_t>(uint64_t, uint8_t)> impl_btb_prediction;
 
-  // code prefetching
-  void l1i_prefetcher_initialize();
-  void l1i_prefetcher_branch_operate(uint64_t ip, uint8_t branch_type, uint64_t branch_target);
-  void l1i_prefetcher_cache_operate(uint64_t v_addr, uint8_t cache_hit, uint8_t prefetch_hit);
-  void l1i_prefetcher_cycle_operate();
-  void l1i_prefetcher_cache_fill(uint64_t v_addr, uint32_t set, uint32_t way, uint8_t prefetch, uint64_t evicted_v_addr);
-  void l1i_prefetcher_final_stats();
-  int prefetch_code_line(uint64_t pf_v_addr);
+    // code prefetching
+    const std::function<void()> impl_prefetcher_initialize;
+    const std::function<void(uint64_t, uint8_t, uint64_t)> impl_prefetcher_branch_operate;
+    const std::function<uint32_t(uint64_t, uint8_t, uint8_t, uint32_t)> impl_prefetcher_cache_operate;
+    const std::function<uint32_t(uint64_t, uint32_t, uint32_t, uint8_t, uint64_t, uint32_t)> impl_prefetcher_cache_fill;
+    const std::function<void()> impl_prefetcher_cycle_operate;
+    const std::function<void()> impl_prefetcher_final_stats;
+
+    int prefetch_code_line(uint64_t pf_v_addr);
+
+#include "ooo_cpu_modules.inc"
+
 };
 
 #endif

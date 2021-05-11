@@ -22,9 +22,7 @@ class BLOCK {
          dirty = false;
 
     uint64_t address = 0,
-             full_addr = 0,
              v_address = 0,
-             full_v_addr = 0,
              data = 0,
              ip = 0,
              cpu = 0,
@@ -37,6 +35,8 @@ class BLOCK {
 class MemoryRequestConsumer
 {
     public:
+        const unsigned fill_level;
+
         /*
          * add_*q() return values:
          *
@@ -51,6 +51,8 @@ class MemoryRequestConsumer
         virtual int  add_pq(PACKET *packet) = 0;
         virtual uint32_t get_occupancy(uint8_t queue_type, uint64_t address) = 0;
         virtual uint32_t get_size(uint8_t queue_type, uint64_t address) = 0;
+
+        explicit MemoryRequestConsumer(unsigned fill_level) : fill_level(fill_level) {}
 };
 
 class MemoryRequestProducer
