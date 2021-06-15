@@ -746,7 +746,6 @@ void O3_CPU::add_load_queue(champsim::circular_buffer<ooo_model_instr>::iterator
     {
         // this load cannot be executed until the prior store gets executed
         prior_it->memory_instrs_depend_on_me.push_back(rob_it);
-        lq_it->producer_id = prior_it->instr_id;
         lq_it->translated = INFLIGHT;
 
         // Is this already in the SQ?
@@ -892,8 +891,6 @@ void O3_CPU::execute_store(std::vector<LSQ_ENTRY>::iterator sq_it)
             if (dependent->source_memory[j] && dependent->source_added[j]) {
                 if (dependent->source_memory[j] == sq_it->virtual_address) { // this is required since a single instruction can issue multiple loads
 
-                    // now we can resolve RAW dependency
-                    assert(dependent->lq_index[j]->producer_id == sq_it->instr_id);
                     // update corresponding LQ entry
                     do_sq_forward_to_lq(*sq_it, *(dependent->lq_index[j]));
                 }

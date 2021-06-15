@@ -95,7 +95,6 @@ void packet_dep_merge(LIST &dest, LIST &src)
 // load/store queue
 struct LSQ_ENTRY {
     uint64_t instr_id = 0,
-             producer_id = std::numeric_limits<uint64_t>::max(),
              virtual_address = 0,
              physical_address = 0,
              ip = 0,
