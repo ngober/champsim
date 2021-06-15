@@ -26,6 +26,7 @@ class PACKET {
         confidence = 0;
 
     uint32_t pf_metadata;
+
     uint32_t cpu = NUM_CPUS;
 
     uint64_t address = 0,
@@ -36,7 +37,8 @@ class PACKET {
              event_cycle = std::numeric_limits<uint64_t>::max(),
              cycle_enqueued = 0;
 
-    std::list<LSQ_ENTRY*> lq_index_depend_on_me = {}, sq_index_depend_on_me = {};
+    std::list<std::vector<LSQ_ENTRY>::iterator> lq_index_depend_on_me = {};
+    std::list<std::vector<LSQ_ENTRY>::iterator> sq_index_depend_on_me = {};
     std::list<champsim::circular_buffer<ooo_model_instr>::iterator> instr_depend_on_me;
     std::list<MemoryRequestProducer*> to_return;
 
@@ -99,7 +101,7 @@ struct LSQ_ENTRY {
              ip = 0,
              event_cycle = 0;
 
-    ooo_model_instr* rob_index = NULL;
+    champsim::circular_buffer<ooo_model_instr>::iterator rob_index;
 
     uint8_t translated = 0,
             fetched = 0,
@@ -114,26 +116,6 @@ class is_valid<LSQ_ENTRY>
         {
             return test.virtual_address != 0;
         }
-};
-
-// reorder buffer
-template <typename T>
-struct CORE_BUFFER {
-    const string NAME;
-    const uint32_t SIZE;
-    uint32_t head = 0, tail = 0, occupancy = 0;
-
-    T *entry;
-
-    // constructor
-    CORE_BUFFER(string v1, uint32_t v2) : NAME(v1), SIZE(v2) {
-        entry = new T[SIZE];
-    };
-
-    // destructor
-    ~CORE_BUFFER() {
-        delete[] entry;
-    };
 };
 
 #endif
