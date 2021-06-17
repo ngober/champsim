@@ -9,7 +9,6 @@
 
 extern uint8_t warmup_complete[NUM_CPUS];
 extern uint8_t knob_cloudsuite;
-extern uint8_t MAX_INSTR_DESTINATIONS;
 
 extern VirtualMemory vmem;
 
@@ -55,85 +54,23 @@ void O3_CPU::init_instruction(ooo_model_instr arch_instr)
 
     arch_instr.instr_id = instr_unique_id;
 
-    bool reads_sp = false;
-    bool writes_sp = false;
-    bool reads_flags = false;
-    bool reads_ip = false;
-    bool writes_ip = false;
-    bool reads_other = false;
+    bool writes_sp   = (std::find(std::begin(arch_instr.destination_registers), std::end(arch_instr.destination_registers), REG_STACK_POINTER) != std::end(arch_instr.destination_registers));
+    bool writes_ip   = (std::find(std::begin(arch_instr.destination_registers), std::end(arch_instr.destination_registers), REG_INSTRUCTION_POINTER) != std::end(arch_instr.destination_registers));
+    bool reads_sp    = (std::find(std::begin(arch_instr.source_registers), std::end(arch_instr.source_registers), REG_STACK_POINTER) != std::end(arch_instr.source_registers));
+    bool reads_flags = (std::find(std::begin(arch_instr.source_registers), std::end(arch_instr.source_registers), REG_FLAGS) != std::end(arch_instr.source_registers));
+    bool reads_ip    = (std::find(std::begin(arch_instr.source_registers), std::end(arch_instr.source_registers), REG_INSTRUCTION_POINTER) != std::end(arch_instr.source_registers));
+    bool reads_other = std::any_of(std::begin(arch_instr.source_registers), std::end(arch_instr.source_registers), [](uint8_t sreg){ return sreg != 0 && sreg != REG_STACK_POINTER && sreg != REG_FLAGS && sreg != REG_INSTRUCTION_POINTER; });
 
-    for (uint32_t i=0; i<MAX_INSTR_DESTINATIONS; i++)
-    {
-        switch(arch_instr.destination_registers[i])
-        {
-            case 0:
-                break;
-            case REG_STACK_POINTER:
-                writes_sp = true;
-                break;
-            case REG_INSTRUCTION_POINTER:
-                writes_ip = true;
-                break;
-            default:
-                break;
-        }
+    auto num_sreg = std::size(arch_instr.source_registers) - std::count(std::begin(arch_instr.source_registers), std::end(arch_instr.source_registers), 0);
+    auto num_dreg = std::size(arch_instr.destination_registers) - std::count(std::begin(arch_instr.destination_registers), std::end(arch_instr.destination_registers), 0);
+    auto num_smem = std::size(arch_instr.source_memory) - std::count(std::begin(arch_instr.source_memory), std::end(arch_instr.source_memory), 0);
+    auto num_dmem = std::size(arch_instr.destination_memory) - std::count(std::begin(arch_instr.destination_memory), std::end(arch_instr.destination_memory), 0);
 
-        /*
-           if((arch_instr.is_branch) && (arch_instr.destination_registers[i] > 24) && (arch_instr.destination_registers[i] < 28))
-           {
-           arch_instr.destination_registers[i] = 0;
-           }
-           */
+    std::fill_n(std::back_inserter(STA), num_dmem, instr_unique_id);
+    assert(std::size(STA) <= std::size(ROB)*NUM_INSTR_DESTINATIONS_SPARC);
 
-        if (arch_instr.destination_registers[i])
-            arch_instr.num_reg_ops++;
-        if (arch_instr.destination_memory[i])
-        {
-            arch_instr.num_mem_ops++;
-
-            // update STA, this structure is required to execute store instructions properly without deadlock
-            if (arch_instr.num_mem_ops > 0)
-            {
-#ifdef SANITY_CHECK
-                assert(STA.size() < ROB.size()*NUM_INSTR_DESTINATIONS_SPARC);
-#endif
-                STA.push(instr_unique_id);
-            }
-        }
-    }
-
-    for (int i=0; i<NUM_INSTR_SOURCES; i++)
-    {
-        switch(arch_instr.source_registers[i])
-        {
-            case 0:
-                break;
-            case REG_STACK_POINTER:
-                reads_sp = true;
-                break;
-            case REG_FLAGS:
-                reads_flags = true;
-                break;
-            case REG_INSTRUCTION_POINTER:
-                reads_ip = true;
-                break;
-            default:
-                reads_other = true;
-                break;
-        }
-
-        /*
-           if((!arch_instr.is_branch) && (arch_instr.source_registers[i] > 25) && (arch_instr.source_registers[i] < 28))
-           {
-           arch_instr.source_registers[i] = 0;
-           }
-           */
-
-        if (arch_instr.source_registers[i])
-            arch_instr.num_reg_ops++;
-        if (arch_instr.source_memory[i])
-            arch_instr.num_mem_ops++;
-    }
+    arch_instr.num_reg_ops = num_sreg + num_dreg;
+    arch_instr.num_mem_ops = num_smem + num_dmem;
 
     if (arch_instr.num_mem_ops > 0)
         arch_instr.is_memory = 1;
@@ -211,7 +148,7 @@ void O3_CPU::init_instruction(ooo_model_instr arch_instr)
        // which can't be determined before execution.
        if((arch_instr.is_branch != 0) || (arch_instr.num_mem_ops > 0) || (!reads_other))
          {
-           for (uint32_t i=0; i<MAX_INSTR_DESTINATIONS; i++)
+           for (uint32_t i=0; i<std::size(arch_instr.destination_registers); i++)
              {
                if(arch_instr.destination_registers[i] == REG_STACK_POINTER)
                  {
@@ -274,17 +211,11 @@ void O3_CPU::init_instruction(ooo_model_instr arch_instr)
     // fast warmup eliminates register dependencies between instructions
     // branch predictor, cache contents, and prefetchers are still warmed up
     if(!warmup_complete[cpu])
-      {
-	for (int i=0; i<NUM_INSTR_SOURCES; i++)
-	  {
-	    arch_instr.source_registers[i] = 0;
-	  }
-	for (uint32_t i=0; i<MAX_INSTR_DESTINATIONS; i++)
-	  {
-	    arch_instr.destination_registers[i] = 0;
-	  }
-	arch_instr.num_reg_ops = 0;
-      }
+    {
+        std::fill(std::begin(arch_instr.source_registers), std::end(arch_instr.source_registers), 0);
+        std::fill(std::begin(arch_instr.destination_registers), std::end(arch_instr.destination_registers), 0);
+        arch_instr.num_reg_ops = 0;
+    }
 
     // Add to IFETCH_BUFFER
     IFETCH_BUFFER.push_back(arch_instr);
@@ -627,7 +558,7 @@ void O3_CPU::do_memory_scheduling(champsim::circular_buffer<ooo_model_instr>::it
     uint32_t num_mem_ops = 0, num_added = 0;
 
     // load
-    for (uint32_t i=0; i<NUM_INSTR_SOURCES; i++) {
+    for (uint32_t i=0; i<std::size(rob_it->source_memory); i++) {
         if (rob_it->source_memory[i]) {
             num_mem_ops++;
             if (rob_it->source_added[i])
@@ -645,7 +576,7 @@ void O3_CPU::do_memory_scheduling(champsim::circular_buffer<ooo_model_instr>::it
     }
 
     // store
-    for (uint32_t i=0; i<MAX_INSTR_DESTINATIONS; i++) {
+    for (uint32_t i=0; i<std::size(rob_it->destination_memory); i++) {
         if (rob_it->destination_memory[i]) {
             num_mem_ops++;
             if (rob_it->destination_added[i])
@@ -774,7 +705,7 @@ void O3_CPU::add_store_queue(champsim::circular_buffer<ooo_model_instr>::iterato
     // succesfully added to the store queue
     rob_it->destination_added[data_index] = 1;
 
-    STA.pop();
+    STA.pop_front();
 
     RTS0.push(sq_it);
 
@@ -881,7 +812,7 @@ void O3_CPU::execute_store(std::vector<LSQ_ENTRY>::iterator sq_it)
     // check if this store has dependent loads
     for (auto dependent : sq_it->rob_index->memory_instrs_depend_on_me) {
         // check if dependent loads are already added in the load queue
-        for (uint32_t j=0; j<NUM_INSTR_SOURCES; j++) { // which one is dependent?
+        for (uint32_t j=0; j<std::size(dependent->source_memory); j++) { // which one is dependent?
             if (dependent->source_memory[j] && dependent->source_added[j]) {
                 if (dependent->source_memory[j] == sq_it->virtual_address) { // this is required since a single instruction can issue multiple loads
 
@@ -1115,7 +1046,7 @@ void O3_CPU::retire_rob()
 
     while (retire_bandwidth > 0 && !ROB.empty() && (ROB.front().executed == COMPLETED))
     {
-        for (uint32_t i=0; i<MAX_INSTR_DESTINATIONS; i++) {
+        for (uint32_t i=0; i<std::size(ROB.front().destination_memory); i++) {
             if (ROB.front().destination_memory[i]) {
 
                 PACKET data_packet;
