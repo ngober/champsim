@@ -1,6 +1,7 @@
 #ifndef INSTRUCTION_H
 #define INSTRUCTION_H
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <iostream>
@@ -8,6 +9,7 @@
 #include <vector>
 
 #include "circular_buffer.hpp"
+#include "util.h"
 
 // instruction format
 #define NUM_INSTR_DESTINATIONS_SPARC 4
@@ -64,6 +66,15 @@ struct cloudsuite_instr {
 };
 
 struct ooo_model_instr {
+    struct lsq_info
+    {
+        uint64_t address = 0;
+        bool added = false;
+        std::vector<LSQ_ENTRY>::iterator q_it;
+
+        explicit lsq_info(uint64_t addr) : address(addr) {}
+    };
+
     uint64_t instr_id = 0,
              ip = 0,
              event_cycle = 0;
@@ -71,9 +82,7 @@ struct ooo_model_instr {
     bool is_branch = 0,
          is_memory = 0,
          branch_taken = 0,
-         branch_mispredicted = 0,
-         source_added[NUM_INSTR_SOURCES] = {},
-         destination_added[NUM_INSTR_DESTINATIONS_SPARC] = {};
+         branch_mispredicted = 0;
 
     uint8_t asid[2] = {std::numeric_limits<uint8_t>::max(), std::numeric_limits<uint8_t>::max()};
 
@@ -87,79 +96,62 @@ struct ooo_model_instr {
             executed = 0;
     int num_reg_ops = 0, num_mem_ops = 0, num_reg_dependent = 0;
 
-    uint8_t destination_registers[NUM_INSTR_DESTINATIONS_SPARC] = {}; // output registers
-
-    uint8_t source_registers[NUM_INSTR_SOURCES] = {}; // input registers 
+    std::vector<uint8_t> destination_registers; // output registers
+    std::vector<uint8_t> source_registers; // input registers 
 
     // these are indices of instructions in the ROB that depend on me
     std::vector<champsim::circular_buffer<ooo_model_instr>::iterator> registers_instrs_depend_on_me, memory_instrs_depend_on_me;
 
     // memory addresses that may cause dependencies between instructions
     uint64_t instruction_pa = 0;
-    uint64_t destination_memory[NUM_INSTR_DESTINATIONS_SPARC] = {}; // output memory
-    uint64_t source_memory[NUM_INSTR_SOURCES] = {}; // input memory
 
-    std::array<std::vector<LSQ_ENTRY>::iterator, NUM_INSTR_SOURCES> lq_index = {};
-    std::array<std::vector<LSQ_ENTRY>::iterator, NUM_INSTR_DESTINATIONS_SPARC> sq_index = {};
+    std::vector<lsq_info> source_memory;
+    std::vector<lsq_info> destination_memory;
 
     ooo_model_instr() = default;
 
-    ooo_model_instr(uint8_t cpu, input_instr instr)
+    private:
+    template <typename T>
+    ooo_model_instr(T instr)
+        : ip(instr.ip), is_branch(instr.is_branch), branch_taken(instr.branch_taken)
     {
-        std::copy(std::begin(instr.destination_registers), std::end(instr.destination_registers), std::begin(this->destination_registers));
-        std::copy(std::begin(instr.destination_memory), std::end(instr.destination_memory), std::begin(this->destination_memory));
-        std::copy(std::begin(instr.source_registers), std::end(instr.source_registers), std::begin(this->source_registers));
-        std::copy(std::begin(instr.source_memory), std::end(instr.source_memory), std::begin(this->source_memory));
+        std::copy_if(std::begin(instr.destination_registers), std::end(instr.destination_registers), std::back_inserter(this->destination_registers), [](uint8_t x){ return x != 0; });
+        std::copy_if(std::begin(instr.source_registers), std::end(instr.source_registers), std::back_inserter(this->source_registers), [](uint8_t x){ return x != 0; });
 
-        this->ip = instr.ip;
-        this->is_branch = instr.is_branch;
-        this->branch_taken = instr.branch_taken;
+        for (auto addr : instr.source_memory)
+        {
+            if (addr)
+                this->source_memory.emplace_back(addr);
+        }
 
+        for (auto addr : instr.destination_memory)
+        {
+            if (addr)
+                this->destination_memory.emplace_back(addr);
+        }
+    }
+
+    public:
+    ooo_model_instr(uint8_t cpu, input_instr instr) : ooo_model_instr(instr)
+    {
         asid[0] = cpu;
         asid[1] = cpu;
     }
 
-    ooo_model_instr(uint8_t cpu, cloudsuite_instr instr)
+    ooo_model_instr(uint8_t cpu, cloudsuite_instr instr) : ooo_model_instr(instr)
     {
-        std::copy(std::begin(instr.destination_registers), std::end(instr.destination_registers), std::begin(this->destination_registers));
-        std::copy(std::begin(instr.destination_memory), std::end(instr.destination_memory), std::begin(this->destination_memory));
-        std::copy(std::begin(instr.source_registers), std::end(instr.source_registers), std::begin(this->source_registers));
-        std::copy(std::begin(instr.source_memory), std::end(instr.source_memory), std::begin(this->source_memory));
-
-        this->ip = instr.ip;
-        this->is_branch = instr.is_branch;
-        this->branch_taken = instr.branch_taken;
-
         std::copy(std::begin(instr.asid), std::begin(instr.asid), std::begin(this->asid));
     }
+};
 
-    void print_instr()
-    {
-        std::cout << "*** " << instr_id << " ***" << std::endl;
-        std::cout << std::hex << "0x" << (uint64_t)ip << std::dec << std::endl;
-        std::cout << (uint32_t)is_branch << " " << (uint32_t)branch_taken << std::endl;
-        for(uint32_t i=0; i<NUM_INSTR_SOURCES; i++)
+template <>
+class is_valid<ooo_model_instr::lsq_info>
+{
+    public:
+        bool operator() (const ooo_model_instr::lsq_info &test)
         {
-            std::cout << (uint32_t)source_registers[i] << " ";
+            return test.address != 0;
         }
-        std::cout << std::endl;
-        for(uint32_t i=0; i<NUM_INSTR_SOURCES; i++)
-        {
-            std::cout << std::hex << "0x" << (uint32_t)source_memory[i] << std::dec << " ";
-        }
-        std::cout << std::endl;
-        for(uint32_t i=0; i<NUM_INSTR_DESTINATIONS; i++)
-        {
-            std::cout << (uint32_t)destination_registers[i] << " ";
-        }
-        std::cout << std::endl;
-        for(uint32_t i=0; i<NUM_INSTR_DESTINATIONS; i++)
-        {
-            std::cout << std::hex << "0x" << (uint32_t)destination_memory[i] << std::dec << " ";
-        }
-        std::cout << std::endl;
-        std::cout << std::endl;
-    }
 };
 
 #endif

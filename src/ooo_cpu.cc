@@ -56,12 +56,12 @@ void O3_CPU::init_instruction(ooo_model_instr arch_instr)
     bool reads_sp    = (std::find(std::begin(arch_instr.source_registers), std::end(arch_instr.source_registers), REG_STACK_POINTER) != std::end(arch_instr.source_registers));
     bool reads_flags = (std::find(std::begin(arch_instr.source_registers), std::end(arch_instr.source_registers), REG_FLAGS) != std::end(arch_instr.source_registers));
     bool reads_ip    = (std::find(std::begin(arch_instr.source_registers), std::end(arch_instr.source_registers), REG_INSTRUCTION_POINTER) != std::end(arch_instr.source_registers));
-    bool reads_other = std::any_of(std::begin(arch_instr.source_registers), std::end(arch_instr.source_registers), [](uint8_t sreg){ return sreg != 0 && sreg != REG_STACK_POINTER && sreg != REG_FLAGS && sreg != REG_INSTRUCTION_POINTER; });
+    bool reads_other = std::any_of(std::begin(arch_instr.source_registers), std::end(arch_instr.source_registers), [](uint8_t sreg){ return sreg != REG_STACK_POINTER && sreg != REG_FLAGS && sreg != REG_INSTRUCTION_POINTER; });
 
-    auto num_sreg = std::size(arch_instr.source_registers) - std::count(std::begin(arch_instr.source_registers), std::end(arch_instr.source_registers), 0);
-    auto num_dreg = std::size(arch_instr.destination_registers) - std::count(std::begin(arch_instr.destination_registers), std::end(arch_instr.destination_registers), 0);
-    auto num_smem = std::size(arch_instr.source_memory) - std::count(std::begin(arch_instr.source_memory), std::end(arch_instr.source_memory), 0);
-    auto num_dmem = std::size(arch_instr.destination_memory) - std::count(std::begin(arch_instr.destination_memory), std::end(arch_instr.destination_memory), 0);
+    auto num_sreg = std::size(arch_instr.source_registers);
+    auto num_dreg = std::size(arch_instr.destination_registers);
+    auto num_smem = std::size(arch_instr.source_memory);
+    auto num_dmem = std::size(arch_instr.destination_memory);
 
     std::fill_n(std::back_inserter(STA), num_dmem, instr_unique_id);
     assert(std::size(STA) <= std::size(ROB)*NUM_INSTR_DESTINATIONS_SPARC);
@@ -144,16 +144,14 @@ void O3_CPU::init_instruction(ooo_model_instr arch_instr)
        // reads_other indicates that the stack pointer is being changed by a variable amount,
        // which can't be determined before execution.
        if((arch_instr.is_branch != 0) || (arch_instr.num_mem_ops > 0) || (!reads_other))
-         {
-           for (uint32_t i=0; i<std::size(arch_instr.destination_registers); i++)
-             {
-               if(arch_instr.destination_registers[i] == REG_STACK_POINTER)
-                 {
-                   arch_instr.destination_registers[i] = 0;
-                   arch_instr.num_reg_ops--;
-                 }
-             }
-         }
+       {
+           auto sp = std::find(std::begin(arch_instr.destination_registers), std::end(arch_instr.destination_registers), REG_STACK_POINTER);
+           if (sp != std::end(arch_instr.destination_registers))
+           {
+               arch_instr.destination_registers.erase(sp);
+               arch_instr.num_reg_ops--;
+           }
+       }
       }
 
     // add this instruction to the IFETCH_BUFFER
@@ -207,8 +205,8 @@ void O3_CPU::init_instruction(ooo_model_instr arch_instr)
     // branch predictor, cache contents, and prefetchers are still warmed up
     if(!warmup_complete[cpu])
     {
-        std::fill(std::begin(arch_instr.source_registers), std::end(arch_instr.source_registers), 0);
-        std::fill(std::begin(arch_instr.destination_registers), std::end(arch_instr.destination_registers), 0);
+        arch_instr.source_registers.clear();
+        arch_instr.destination_registers.clear();
         arch_instr.num_reg_ops = 0;
     }
 
@@ -489,14 +487,12 @@ void O3_CPU::do_scheduling(champsim::circular_buffer<ooo_model_instr>::iterator 
 {
     // Mark register dependencies
     for (auto src_reg : rob_it->source_registers) {
-        if (src_reg) {
-            champsim::circular_buffer<ooo_model_instr>::reverse_iterator prior{rob_it};
-            prior = std::find_if(prior, ROB.rend(), instr_reg_will_produce(src_reg));
-            if (prior != ROB.rend() && (prior->registers_instrs_depend_on_me.empty() || prior->registers_instrs_depend_on_me.back() != rob_it))
-            {
-                prior->registers_instrs_depend_on_me.push_back(rob_it);
-                rob_it->num_reg_dependent++;
-            }
+        champsim::circular_buffer<ooo_model_instr>::reverse_iterator prior{rob_it};
+        prior = std::find_if(prior, ROB.rend(), instr_reg_will_produce(src_reg));
+        if (prior != ROB.rend() && (prior->registers_instrs_depend_on_me.empty() || prior->registers_instrs_depend_on_me.back() != rob_it))
+        {
+            prior->registers_instrs_depend_on_me.push_back(rob_it);
+            rob_it->num_reg_dependent++;
         }
     }
 
@@ -553,9 +549,10 @@ void O3_CPU::do_memory_scheduling(champsim::circular_buffer<ooo_model_instr>::it
     // load
     for (uint32_t i=0; i<std::size(rob_it->source_memory); i++)
     {
-        if (rob_it->source_memory[i] && !rob_it->source_added[i])
+        if (!rob_it->source_memory[i].added)
         {
-            if (!std::all_of(std::begin(LQ), std::end(LQ), is_valid<LSQ_ENTRY>()))
+            auto lq_it = std::find_if_not(std::begin(LQ), std::end(LQ), is_valid<LSQ_ENTRY>());
+            if (lq_it != std::end(LQ))
             {
                 add_load_queue(rob_it, i);
             }
@@ -571,9 +568,10 @@ void O3_CPU::do_memory_scheduling(champsim::circular_buffer<ooo_model_instr>::it
     // store
     for (uint32_t i=0; i<std::size(rob_it->destination_memory); i++)
     {
-        if (rob_it->destination_memory[i] && !rob_it->destination_added[i])
+        if (!rob_it->destination_memory[i].added)
         {
-            if (!std::all_of(std::begin(SQ), std::end(SQ), is_valid<LSQ_ENTRY>()))
+            auto sq_it = std::find_if_not(std::begin(SQ), std::end(SQ), is_valid<LSQ_ENTRY>());
+            if (sq_it != std::end(SQ))
             {
                 if (STA.front() == rob_it->instr_id)
                     add_store_queue(rob_it, i);
@@ -587,17 +585,10 @@ void O3_CPU::do_memory_scheduling(champsim::circular_buffer<ooo_model_instr>::it
         }
     }
 
-    auto num_smem = std::size(rob_it->source_memory) - std::count(std::begin(rob_it->source_memory), std::end(rob_it->source_memory), 0);
-    auto num_dmem = std::size(rob_it->destination_memory) - std::count(std::begin(rob_it->destination_memory), std::end(rob_it->destination_memory), 0);
-    auto num_sadd = std::size(rob_it->source_added) - std::count(std::begin(rob_it->source_added), std::end(rob_it->source_added), 0);
-    auto num_dadd = std::size(rob_it->destination_added) - std::count(std::begin(rob_it->destination_added), std::end(rob_it->destination_added), 0);
+    auto all_smem = std::all_of(std::begin(rob_it->source_memory), std::end(rob_it->source_memory), [](ooo_model_instr::lsq_info x){ return x.added; });
+    auto all_dmem = std::all_of(std::begin(rob_it->destination_memory), std::end(rob_it->destination_memory), [](ooo_model_instr::lsq_info x){ return x.added; });
 
-    auto num_mem_ops = num_smem + num_dmem;
-    auto num_added = num_sadd + num_dadd;
-
-    assert(num_added <= num_mem_ops);
-
-    if (num_mem_ops == num_added) {
+    if (all_smem && all_dmem) {
         rob_it->scheduled = COMPLETED;
         if (rob_it->executed == 0) // it could be already set to COMPLETED due to store-to-load forwarding
             rob_it->executed  = INFLIGHT;
@@ -635,7 +626,7 @@ struct instr_mem_will_produce
     {
         auto dmem_begin = std::begin(test.destination_memory);
         auto dmem_end   = std::end(test.destination_memory);
-        return std::find(dmem_begin, dmem_end, match_mem) != dmem_end;
+        return std::find_if(dmem_begin, dmem_end, eq_addr<ooo_model_instr::lsq_info>(match_mem)) != dmem_end;
     }
 };
 
@@ -656,10 +647,10 @@ void O3_CPU::add_load_queue(champsim::circular_buffer<ooo_model_instr>::iterator
     assert(lq_it != std::end(LQ));
 
     // add it to the load queue
-    rob_it->lq_index[data_index] = lq_it;
-    rob_it->source_added[data_index] = 1;
+    rob_it->source_memory[data_index].q_it = lq_it;
+    rob_it->source_memory[data_index].added = true;
     lq_it->instr_id = rob_it->instr_id;
-    lq_it->virtual_address = rob_it->source_memory[data_index];
+    lq_it->virtual_address = rob_it->source_memory[data_index].address;
     lq_it->ip = rob_it->ip;
     lq_it->rob_index = rob_it;
     lq_it->asid[0] = rob_it->asid[0];
@@ -693,9 +684,9 @@ void O3_CPU::add_store_queue(champsim::circular_buffer<ooo_model_instr>::iterato
     assert(sq_it->virtual_address == 0);
 
     // add it to the store queue
-    rob_it->sq_index[data_index] = sq_it;
+    rob_it->destination_memory[data_index].q_it = sq_it;
     sq_it->instr_id = rob_it->instr_id;
-    sq_it->virtual_address = rob_it->destination_memory[data_index];
+    sq_it->virtual_address = rob_it->destination_memory[data_index].address;
     sq_it->ip = rob_it->ip;
     sq_it->rob_index = rob_it;
     sq_it->asid[0] = rob_it->asid[0];
@@ -703,7 +694,7 @@ void O3_CPU::add_store_queue(champsim::circular_buffer<ooo_model_instr>::iterato
     sq_it->event_cycle = current_cycle + SCHEDULING_LATENCY;
 
     // succesfully added to the store queue
-    rob_it->destination_added[data_index] = 1;
+    rob_it->destination_memory[data_index].added = true;
 
     STA.pop_front();
 
@@ -812,15 +803,9 @@ void O3_CPU::execute_store(std::vector<LSQ_ENTRY>::iterator sq_it)
     // check if this store has dependent loads
     for (auto dependent : sq_it->rob_index->memory_instrs_depend_on_me) {
         // check if dependent loads are already added in the load queue
-        for (uint32_t j=0; j<std::size(dependent->source_memory); j++) { // which one is dependent?
-            if (dependent->source_memory[j] && dependent->source_added[j]) {
-                if (dependent->source_memory[j] == sq_it->virtual_address) { // this is required since a single instruction can issue multiple loads
-
-                    // update corresponding LQ entry
-                    do_sq_forward_to_lq(*sq_it, *(dependent->lq_index[j]));
-                }
-            }
-        }
+        auto dsm_info = std::find_if(std::begin(dependent->source_memory), std::end(dependent->source_memory), eq_addr<ooo_model_instr::lsq_info>(sq_it->virtual_address));
+        if (dsm_info->added)
+            do_sq_forward_to_lq(*sq_it, *dsm_info->q_it);
     }
 }
 
@@ -1046,11 +1031,11 @@ void O3_CPU::retire_rob()
 
     while (retire_bandwidth > 0 && !ROB.empty() && (ROB.front().executed == COMPLETED))
     {
-        for (uint32_t i=0; i<std::size(ROB.front().destination_memory); i++) {
-            if (ROB.front().destination_memory[i]) {
+        for (auto &dmem : ROB.front().destination_memory) {
+            if (dmem.address) {
 
                 PACKET data_packet;
-                auto sq_it = ROB.front().sq_index[i];
+                auto sq_it = dmem.q_it;
 
                 // sq_index and rob_index are no longer available after retirement
                 // but we pass this information to avoid segmentation fault
@@ -1067,7 +1052,7 @@ void O3_CPU::retire_rob()
                 auto result = L1D_bus.lower_level->add_wq(&data_packet);
                 if (result != -2)
                 {
-                    ROB.front().destination_memory[i] = 0;
+                    dmem.address = 0;
                     LSQ_ENTRY empty;
                     *sq_it = empty;
                 }
