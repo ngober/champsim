@@ -3,14 +3,11 @@
 
 #include "ooo_cpu.h"
 #include "instruction.h"
-#include "vmem.h"
 
 #define DEADLOCK_CYCLE 1000000
 
 extern uint8_t warmup_complete[NUM_CPUS];
 extern uint8_t knob_cloudsuite;
-
-extern VirtualMemory vmem;
 
 void O3_CPU::operate()
 {
@@ -169,14 +166,12 @@ void O3_CPU::init_instruction(ooo_model_instr arch_instr)
 
         num_branch++;
 
-	std::pair<uint64_t, uint8_t> btb_result = impl_btb_prediction(arch_instr.ip, arch_instr.branch_type);
-	uint64_t predicted_branch_target = btb_result.first;
-	uint8_t always_taken = btb_result.second;
-	uint8_t branch_prediction = impl_predict_branch(arch_instr.ip, predicted_branch_target, always_taken, arch_instr.branch_type);
-	if((branch_prediction == 0) && (always_taken == 0))
-	  {
-	    predicted_branch_target = 0;
-	  }
+        auto [predicted_branch_target, always_taken] = impl_btb_prediction(arch_instr.ip, arch_instr.branch_type);
+        uint8_t branch_prediction = impl_predict_branch(arch_instr.ip, predicted_branch_target, always_taken, arch_instr.branch_type);
+        if ((branch_prediction == 0) && (always_taken == 0))
+        {
+            predicted_branch_target = 0;
+        }
 
         // call code prefetcher every time the branch predictor is used
         impl_prefetcher_branch_operate(arch_instr.ip, arch_instr.branch_type, predicted_branch_target);
@@ -555,19 +550,17 @@ void O3_CPU::schedule_memory_instruction()
 
 void O3_CPU::do_memory_scheduling(champsim::circular_buffer<ooo_model_instr>::iterator rob_it)
 {
-    uint32_t num_mem_ops = 0, num_added = 0;
-
     // load
-    for (uint32_t i=0; i<std::size(rob_it->source_memory); i++) {
-        if (rob_it->source_memory[i]) {
-            num_mem_ops++;
-            if (rob_it->source_added[i])
-                num_added++;
-            else if (!std::all_of(std::begin(LQ), std::end(LQ), is_valid<LSQ_ENTRY>())) {
+    for (uint32_t i=0; i<std::size(rob_it->source_memory); i++)
+    {
+        if (rob_it->source_memory[i] && !rob_it->source_added[i])
+        {
+            if (!std::all_of(std::begin(LQ), std::end(LQ), is_valid<LSQ_ENTRY>()))
+            {
                 add_load_queue(rob_it, i);
-                num_added++;
             }
-            else {
+            else
+            {
                 DP(if(warmup_complete[cpu]) {
                 cout << "[LQ] " << __func__ << " instr_id: " << rob_it->instr_id;
                 cout << " cannot be added in the load queue occupancy: " << std::count_if(std::begin(LQ), std::end(LQ), is_valid<LSQ_ENTRY>()) << " cycle: " << current_cycle << endl; });
@@ -576,24 +569,31 @@ void O3_CPU::do_memory_scheduling(champsim::circular_buffer<ooo_model_instr>::it
     }
 
     // store
-    for (uint32_t i=0; i<std::size(rob_it->destination_memory); i++) {
-        if (rob_it->destination_memory[i]) {
-            num_mem_ops++;
-            if (rob_it->destination_added[i])
-                num_added++;
-            else if (!std::all_of(std::begin(SQ), std::end(SQ), is_valid<LSQ_ENTRY>())) {
-                if (STA.front() == rob_it->instr_id) {
+    for (uint32_t i=0; i<std::size(rob_it->destination_memory); i++)
+    {
+        if (rob_it->destination_memory[i] && !rob_it->destination_added[i])
+        {
+            if (!std::all_of(std::begin(SQ), std::end(SQ), is_valid<LSQ_ENTRY>()))
+            {
+                if (STA.front() == rob_it->instr_id)
                     add_store_queue(rob_it, i);
-                    num_added++;
-                }
             }
-            else {
+            else
+            {
                 DP(if(warmup_complete[cpu]) {
                 cout << "[SQ] " << __func__ << " instr_id: " << rob_it->instr_id;
                 cout << " cannot be added in the store queue occupancy: " << std::count_if(std::begin(SQ), std::end(SQ), is_valid<LSQ_ENTRY>()) << " cycle: " << current_cycle << endl; });
             }
         }
     }
+
+    auto num_smem = std::size(rob_it->source_memory) - std::count(std::begin(rob_it->source_memory), std::end(rob_it->source_memory), 0);
+    auto num_dmem = std::size(rob_it->destination_memory) - std::count(std::begin(rob_it->destination_memory), std::end(rob_it->destination_memory), 0);
+    auto num_sadd = std::size(rob_it->source_added) - std::count(std::begin(rob_it->source_added), std::end(rob_it->source_added), 0);
+    auto num_dadd = std::size(rob_it->destination_added) - std::count(std::begin(rob_it->destination_added), std::end(rob_it->destination_added), 0);
+
+    auto num_mem_ops = num_smem + num_dmem;
+    auto num_added = num_sadd + num_dadd;
 
     assert(num_added <= num_mem_ops);
 
