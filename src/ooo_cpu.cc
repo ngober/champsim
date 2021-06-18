@@ -482,8 +482,7 @@ void O3_CPU::do_scheduling(champsim::circular_buffer<ooo_model_instr>::iterator 
 {
     // Mark register dependencies
     for (auto src_reg : rob_it->source_registers) {
-        champsim::circular_buffer<ooo_model_instr>::reverse_iterator prior{rob_it};
-        prior = std::find_if(prior, ROB.rend(), instr_reg_will_produce(src_reg));
+        auto prior = std::find_if(std::reverse_iterator{rob_it}, ROB.rend(), instr_reg_will_produce(src_reg));
         if (prior != ROB.rend() && (prior->registers_instrs_depend_on_me.empty() || prior->registers_instrs_depend_on_me.back() != rob_it))
         {
             prior->registers_instrs_depend_on_me.push_back(rob_it);
@@ -539,23 +538,80 @@ void O3_CPU::schedule_memory_instruction()
     }
 }
 
+struct instr_mem_will_produce
+{
+    const uint64_t match_mem;
+    explicit instr_mem_will_produce(uint64_t mem) : match_mem(mem) {}
+    bool operator() (const ooo_model_instr &test) const
+    {
+        auto dmem_begin = std::begin(test.destination_memory);
+        auto dmem_end   = std::end(test.destination_memory);
+        return std::find_if(dmem_begin, dmem_end, eq_addr<ooo_model_instr::lsq_info>(match_mem)) != dmem_end;
+    }
+};
+
+struct sq_will_forward
+{
+    //const uint64_t match_id;
+    const uint64_t match_addr;
+    sq_will_forward(/*uint64_t id,*/ uint64_t addr) : /*match_id(id),*/ match_addr(addr) {}
+    bool operator() (const LSQ_ENTRY &sq_test) const
+    {
+        return sq_test.fetched == COMPLETED /*&& sq_test.instr_id == match_id */&& sq_test.virtual_address == match_addr;
+    }
+};
+
 void O3_CPU::do_memory_scheduling(champsim::circular_buffer<ooo_model_instr>::iterator rob_it)
 {
     // load
-    for (uint32_t i=0; i<std::size(rob_it->source_memory); i++)
+    for (auto &smem_info : rob_it->source_memory)
     {
-        if (!rob_it->source_memory[i].added)
+        if (!smem_info.added && !smem_info.will_forward)
         {
-            auto lq_it = std::find_if_not(std::begin(LQ), std::end(LQ), is_valid<LSQ_ENTRY>());
-            if (lq_it != std::end(LQ))
+            // Is this already in the SQ?
+            auto sq_it = std::find_if(std::begin(SQ), std::end(SQ), sq_will_forward(/*prior_it->instr_id, */smem_info.address));
+            if (sq_it != std::end(SQ))
             {
-                add_load_queue(rob_it, i);
+                DP(if(warmup_complete[cpu]) {
+                        std::cout << "[LQ] " << __func__ << " instr_id: " << rob_it->instr_id << std::hex;
+                        std::cout << " full_addr: " << smem_info.address << std::dec << " is forwarded by store instr_id: ";
+                        std::cout << sq_it->instr_id << " remain_num_ops: " << rob_it->num_mem_ops << " cycle: " << current_cycle << std::endl; });
+
+                rob_it->num_mem_ops--;
+                rob_it->event_cycle = current_cycle;
+                assert(rob_it->num_mem_ops >= 0);
+
+                smem_info.added = true;
             }
             else
             {
-                DP(if(warmup_complete[cpu]) {
-                cout << "[LQ] " << __func__ << " instr_id: " << rob_it->instr_id;
-                cout << " cannot be added in the load queue occupancy: " << std::count_if(std::begin(LQ), std::end(LQ), is_valid<LSQ_ENTRY>()) << " cycle: " << current_cycle << endl; });
+                // Mark RAW in the ROB since the producer might not be added in the store queue yet
+                auto prior_it = std::find_if(std::reverse_iterator{rob_it}, std::rend(ROB), instr_mem_will_produce(smem_info.address));
+                if (prior_it != std::rend(ROB))
+                {
+                    // this load cannot be executed until the prior store gets executed
+                    prior_it->memory_instrs_depend_on_me.push_back(rob_it);
+                    smem_info.will_forward = true;
+                }
+                else
+                {
+                    auto lq_it = std::find_if_not(std::begin(LQ), std::end(LQ), is_valid<LSQ_ENTRY>());
+                    if (lq_it != std::end(LQ))
+                    {
+                        *lq_it = {rob_it->instr_id, smem_info.address, rob_it->ip, rob_it->asid[0], rob_it->asid[1], rob_it, current_cycle+SCHEDULING_LATENCY};
+                        smem_info.q_it = lq_it;
+                        smem_info.added = true;
+
+                        // If this entry is not waiting on RAW
+                        RTL0.push(lq_it);
+                    }
+                    else
+                    {
+                        DP(if(warmup_complete[cpu]) {
+                                cout << "[LQ] " << __func__ << " instr_id: " << rob_it->instr_id;
+                                cout << " cannot be added in the load queue occupancy: " << std::count_if(std::begin(LQ), std::end(LQ), is_valid<LSQ_ENTRY>()) << " cycle: " << current_cycle << endl; });
+                    }
+                }
             }
         }
     }
@@ -591,80 +647,6 @@ void O3_CPU::do_memory_scheduling(champsim::circular_buffer<ooo_model_instr>::it
         DP (if (warmup_complete[cpu]) {
         cout << "[ROB] " << __func__ << " instr_id: " << rob_it->instr_id;
         cout << " scheduled all num_mem_ops: " << rob_it->num_mem_ops << endl; });
-    }
-}
-
-void O3_CPU::do_sq_forward_to_lq(LSQ_ENTRY &sq_entry, LSQ_ENTRY &lq_entry)
-{
-    lq_entry.rob_index->num_mem_ops--;
-    lq_entry.rob_index->event_cycle = current_cycle;
-    assert(lq_entry.rob_index->num_mem_ops >= 0);
-
-    DP(if(warmup_complete[cpu]) {
-            cout << "[LQ] " << __func__ << " instr_id: " << lq_entry.instr_id << hex;
-            cout << " full_addr: " << lq_entry.physical_address << dec << " is forwarded by store instr_id: ";
-            cout << sq_entry.instr_id << " remain_num_ops: " << lq_entry.rob_index->num_mem_ops << " cycle: " << current_cycle << endl; });
-
-    lq_entry = {};
-}
-
-struct instr_mem_will_produce
-{
-    const uint64_t match_mem;
-    explicit instr_mem_will_produce(uint64_t mem) : match_mem(mem) {}
-    bool operator() (const ooo_model_instr &test) const
-    {
-        auto dmem_begin = std::begin(test.destination_memory);
-        auto dmem_end   = std::end(test.destination_memory);
-        return std::find_if(dmem_begin, dmem_end, eq_addr<ooo_model_instr::lsq_info>(match_mem)) != dmem_end;
-    }
-};
-
-struct sq_will_forward
-{
-    const uint64_t match_id, match_addr;
-    sq_will_forward(uint64_t id, uint64_t addr) : match_id(id), match_addr(addr) {}
-    bool operator() (const LSQ_ENTRY &sq_test) const
-    {
-        return sq_test.fetched == COMPLETED && sq_test.instr_id == match_id && sq_test.virtual_address == match_addr;
-    }
-};
-
-void O3_CPU::add_load_queue(champsim::circular_buffer<ooo_model_instr>::iterator rob_it, uint32_t data_index)
-{
-    // search for an empty slot
-    auto lq_it = std::find_if_not(std::begin(LQ), std::end(LQ), is_valid<LSQ_ENTRY>());
-    assert(lq_it != std::end(LQ));
-
-    // add it to the load queue
-    rob_it->source_memory[data_index].q_it = lq_it;
-    rob_it->source_memory[data_index].added = true;
-    lq_it->instr_id = rob_it->instr_id;
-    lq_it->virtual_address = rob_it->source_memory[data_index].address;
-    lq_it->ip = rob_it->ip;
-    lq_it->rob_index = rob_it;
-    lq_it->asid[0] = rob_it->asid[0];
-    lq_it->asid[1] = rob_it->asid[1];
-    lq_it->event_cycle = current_cycle + SCHEDULING_LATENCY;
-
-    // Mark RAW in the ROB since the producer might not be added in the store queue yet
-    champsim::circular_buffer<ooo_model_instr>::reverse_iterator prior_it{rob_it};
-    prior_it = std::find_if(prior_it, ROB.rend(), instr_mem_will_produce(lq_it->virtual_address));
-    if (prior_it != ROB.rend())
-    {
-        // this load cannot be executed until the prior store gets executed
-        prior_it->memory_instrs_depend_on_me.push_back(rob_it);
-        lq_it->translated = INFLIGHT;
-
-        // Is this already in the SQ?
-        auto sq_it = std::find_if(std::begin(SQ), std::end(SQ), sq_will_forward(prior_it->instr_id, lq_it->virtual_address));
-        if (sq_it != std::end(SQ))
-            do_sq_forward_to_lq(*sq_it, *lq_it);
-    }
-    else
-    {
-        // If this entry is not waiting on RAW
-        RTL0.push(lq_it);
     }
 }
 
@@ -794,8 +776,20 @@ void O3_CPU::execute_store(std::vector<LSQ_ENTRY>::iterator sq_it)
     for (auto dependent : sq_it->rob_index->memory_instrs_depend_on_me) {
         // check if dependent loads are already added in the load queue
         auto dsm_info = std::find_if(std::begin(dependent->source_memory), std::end(dependent->source_memory), eq_addr<ooo_model_instr::lsq_info>(sq_it->virtual_address));
-        if (dsm_info->added)
-            do_sq_forward_to_lq(*sq_it, *dsm_info->q_it);
+
+        if (dsm_info != std::end(dependent->source_memory))
+        {
+            DP(if(warmup_complete[cpu]) {
+                std::cout << "[LQ] " << __func__ << " instr_id: " << dependent->instr_id << std::hex;
+                std::cout << " full_addr: " << dsm_info->address << std::dec << " is forwarded by store instr_id: ";
+                std::cout << sq_it->instr_id << " remain_num_ops: " << dependent->num_mem_ops << " cycle: " << current_cycle << std::endl; });
+
+            dependent->num_mem_ops--;
+            dependent->event_cycle = current_cycle;
+            assert(dependent->num_mem_ops >= 0);
+
+            dsm_info->added = true;
+        }
     }
 }
 

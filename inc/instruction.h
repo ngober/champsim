@@ -70,6 +70,7 @@ struct ooo_model_instr {
     {
         uint64_t address = 0;
         bool added = false;
+        bool will_forward = false;
         std::vector<LSQ_ENTRY>::iterator q_it;
 
         explicit lsq_info(uint64_t addr) : address(addr) {}

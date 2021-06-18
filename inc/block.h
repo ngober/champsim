@@ -96,15 +96,16 @@ void packet_dep_merge(LIST &dest, LIST &src)
 struct LSQ_ENTRY {
     uint64_t instr_id = 0,
              virtual_address = 0,
-             physical_address = 0,
-             ip = 0,
-             event_cycle = 0;
+             ip = 0;
+
+    std::array<uint8_t, 2> asid = {std::numeric_limits<uint8_t>::max(), std::numeric_limits<uint8_t>::max()};
 
     champsim::circular_buffer<ooo_model_instr>::iterator rob_index;
 
+    uint64_t event_cycle = 0, physical_address = 0;
+
     uint8_t translated = 0,
-            fetched = 0,
-            asid[2] = {std::numeric_limits<uint8_t>::max(), std::numeric_limits<uint8_t>::max()};
+            fetched = 0;
 };
 
 template <>
