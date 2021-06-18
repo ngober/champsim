@@ -58,16 +58,11 @@ void O3_CPU::init_instruction(ooo_model_instr arch_instr)
     bool reads_ip    = (std::find(std::begin(arch_instr.source_registers), std::end(arch_instr.source_registers), REG_INSTRUCTION_POINTER) != std::end(arch_instr.source_registers));
     bool reads_other = std::any_of(std::begin(arch_instr.source_registers), std::end(arch_instr.source_registers), [](uint8_t sreg){ return sreg != REG_STACK_POINTER && sreg != REG_FLAGS && sreg != REG_INSTRUCTION_POINTER; });
 
-    auto num_sreg = std::size(arch_instr.source_registers);
-    auto num_dreg = std::size(arch_instr.destination_registers);
-    auto num_smem = std::size(arch_instr.source_memory);
-    auto num_dmem = std::size(arch_instr.destination_memory);
-
-    std::fill_n(std::back_inserter(STA), num_dmem, instr_unique_id);
+    std::fill_n(std::back_inserter(STA), std::size(arch_instr.destination_memory), instr_unique_id);
     assert(std::size(STA) <= std::size(ROB)*NUM_INSTR_DESTINATIONS_SPARC);
 
-    arch_instr.num_reg_ops = num_sreg + num_dreg;
-    arch_instr.num_mem_ops = num_smem + num_dmem;
+    arch_instr.num_reg_ops = std::size(arch_instr.source_registers) + std::size(arch_instr.destination_registers);
+    arch_instr.num_mem_ops = std::size(arch_instr.source_memory) + std::size(arch_instr.destination_memory);
 
     if (arch_instr.num_mem_ops > 0)
         arch_instr.is_memory = 1;
@@ -601,21 +596,16 @@ void O3_CPU::do_memory_scheduling(champsim::circular_buffer<ooo_model_instr>::it
 
 void O3_CPU::do_sq_forward_to_lq(LSQ_ENTRY &sq_entry, LSQ_ENTRY &lq_entry)
 {
-        lq_entry.physical_address = splice_bits(sq_entry.physical_address, lq_entry.virtual_address, LOG2_BLOCK_SIZE);
-        lq_entry.translated = COMPLETED;
-        lq_entry.fetched = COMPLETED;
+    lq_entry.rob_index->num_mem_ops--;
+    lq_entry.rob_index->event_cycle = current_cycle;
+    assert(lq_entry.rob_index->num_mem_ops >= 0);
 
-        lq_entry.rob_index->num_mem_ops--;
-        lq_entry.rob_index->event_cycle = current_cycle;
-        assert(lq_entry.rob_index->num_mem_ops >= 0);
+    DP(if(warmup_complete[cpu]) {
+            cout << "[LQ] " << __func__ << " instr_id: " << lq_entry.instr_id << hex;
+            cout << " full_addr: " << lq_entry.physical_address << dec << " is forwarded by store instr_id: ";
+            cout << sq_entry.instr_id << " remain_num_ops: " << lq_entry.rob_index->num_mem_ops << " cycle: " << current_cycle << endl; });
 
-        DP(if(warmup_complete[cpu]) {
-                cout << "[LQ] " << __func__ << " instr_id: " << lq_entry.instr_id << hex;
-                cout << " full_addr: " << lq_entry.physical_address << dec << " is forwarded by store instr_id: ";
-                cout << sq_entry.instr_id << " remain_num_ops: " << lq_entry.rob_index->num_mem_ops << " cycle: " << current_cycle << endl; });
-
-        LSQ_ENTRY empty_entry;
-        lq_entry = empty_entry;
+    lq_entry = {};
 }
 
 struct instr_mem_will_produce
@@ -1015,8 +1005,7 @@ void O3_CPU::handle_memory_return()
             merged->rob_index->num_mem_ops--;
             merged->rob_index->event_cycle = current_cycle;
 
-          LSQ_ENTRY empty_entry;
-          *merged = empty_entry;
+            *merged = {};
 	    }
 
 	  // remove this entry
@@ -1053,8 +1042,7 @@ void O3_CPU::retire_rob()
                 if (result != -2)
                 {
                     dmem.address = 0;
-                    LSQ_ENTRY empty;
-                    *sq_it = empty;
+                    *sq_it = {};
                 }
                 else
                 {
