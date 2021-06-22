@@ -262,16 +262,7 @@ void O3_CPU::do_translate_fetch(champsim::circular_buffer<ooo_model_instr>::iter
 {
     // begin process of fetching this instruction by sending it to the ITLB
     // add it to the ITLB's read queue
-    PACKET trace_packet;
-    trace_packet.fill_level = ITLB_bus.lower_level->fill_level;
-    trace_packet.cpu = cpu;
-    trace_packet.address = begin->ip;
-    trace_packet.v_address = begin->ip;
-    trace_packet.instr_id = begin->instr_id;
-    trace_packet.ip = begin->ip;
-    trace_packet.type = LOAD;
-    trace_packet.asid[0] = 0;
-    trace_packet.asid[1] = 0;
+    PACKET trace_packet = {LOAD, ITLB_bus.lower_level->fill_level, begin->ip, begin->ip, begin->instr_id, begin->ip, 0, 0, cpu};
     trace_packet.to_return = {&ITLB_bus};
     for (; begin != end; ++begin)
         trace_packet.instr_depend_on_me.push_back(begin);
@@ -316,17 +307,8 @@ void O3_CPU::fetch_instruction()
 void O3_CPU::do_fetch_instruction(champsim::circular_buffer<ooo_model_instr>::iterator begin, champsim::circular_buffer<ooo_model_instr>::iterator end)
 {
     // add it to the L1-I's read queue
-    PACKET fetch_packet;
-    fetch_packet.fill_level = L1I_bus.lower_level->fill_level;
-    fetch_packet.cpu = cpu;
-    fetch_packet.address = begin->instruction_pa;
+    PACKET fetch_packet = {LOAD, L1I_bus.lower_level->fill_level, begin->instruction_pa, begin->ip, begin->instr_id, begin->ip, 0, 0, cpu};
     fetch_packet.data = begin->instruction_pa;
-    fetch_packet.v_address = begin->ip;
-    fetch_packet.instr_id = begin->instr_id;
-    fetch_packet.ip = begin->ip;
-    fetch_packet.type = LOAD; 
-    fetch_packet.asid[0] = 0;
-    fetch_packet.asid[1] = 0;
     fetch_packet.to_return = {&L1I_bus};
     for (; begin != end; ++begin)
         fetch_packet.instr_depend_on_me.push_back(begin);
@@ -656,16 +638,8 @@ void O3_CPU::add_store_queue(champsim::circular_buffer<ooo_model_instr>::iterato
     assert(sq_it->virtual_address == 0);
 
     // add it to the store queue
+    *sq_it = {rob_it->instr_id, rob_it->destination_memory[data_index].address, rob_it->ip, rob_it->asid[0], rob_it->asid[1], rob_it, current_cycle+SCHEDULING_LATENCY};
     rob_it->destination_memory[data_index].q_it = sq_it;
-    sq_it->instr_id = rob_it->instr_id;
-    sq_it->virtual_address = rob_it->destination_memory[data_index].address;
-    sq_it->ip = rob_it->ip;
-    sq_it->rob_index = rob_it;
-    sq_it->asid[0] = rob_it->asid[0];
-    sq_it->asid[1] = rob_it->asid[1];
-    sq_it->event_cycle = current_cycle + SCHEDULING_LATENCY;
-
-    // succesfully added to the store queue
     rob_it->destination_memory[data_index].added = true;
 
     STA.pop_front();
@@ -732,17 +706,7 @@ void O3_CPU::operate_lsq()
 
 int O3_CPU::do_translate_store(std::vector<LSQ_ENTRY>::iterator sq_it)
 {
-    PACKET data_packet;
-
-    data_packet.fill_level = DTLB_bus.lower_level->fill_level;
-    data_packet.cpu = cpu;
-    data_packet.address = sq_it->virtual_address;
-    data_packet.v_address = sq_it->virtual_address;
-    data_packet.instr_id = sq_it->instr_id;
-    data_packet.ip = sq_it->ip;
-    data_packet.type = RFO;
-    data_packet.asid[0] = sq_it->asid[0];
-    data_packet.asid[1] = sq_it->asid[1];
+    PACKET data_packet = {RFO, DTLB_bus.lower_level->fill_level, sq_it->virtual_address, sq_it->virtual_address, sq_it->instr_id, sq_it->ip, sq_it->asid[0], sq_it->asid[1], cpu};
     data_packet.to_return = {&DTLB_bus};
     data_packet.sq_index_depend_on_me = {sq_it};
 
@@ -795,16 +759,7 @@ void O3_CPU::execute_store(std::vector<LSQ_ENTRY>::iterator sq_it)
 
 int O3_CPU::do_translate_load(std::vector<LSQ_ENTRY>::iterator lq_it)
 {
-    PACKET data_packet;
-    data_packet.fill_level = DTLB_bus.lower_level->fill_level;
-    data_packet.cpu = cpu;
-    data_packet.address = lq_it->virtual_address;
-    data_packet.v_address = lq_it->virtual_address;
-    data_packet.instr_id = lq_it->instr_id;
-    data_packet.ip = lq_it->ip;
-    data_packet.type = LOAD;
-    data_packet.asid[0] = lq_it->asid[0];
-    data_packet.asid[1] = lq_it->asid[1];
+    PACKET data_packet = {LOAD, DTLB_bus.lower_level->fill_level, lq_it->virtual_address, lq_it->virtual_address, lq_it->instr_id, lq_it->ip, lq_it->asid[0], lq_it->asid[1], cpu};
     data_packet.to_return = {&DTLB_bus};
     data_packet.lq_index_depend_on_me = {lq_it};
 
@@ -822,16 +777,7 @@ int O3_CPU::do_translate_load(std::vector<LSQ_ENTRY>::iterator lq_it)
 int O3_CPU::execute_load(std::vector<LSQ_ENTRY>::iterator lq_it)
 {
     // add it to L1D
-    PACKET data_packet;
-    data_packet.fill_level = L1D_bus.lower_level->fill_level;
-    data_packet.cpu = cpu;
-    data_packet.address = lq_it->physical_address;
-    data_packet.v_address = lq_it->virtual_address;
-    data_packet.instr_id = lq_it->instr_id;
-    data_packet.ip = lq_it->ip;
-    data_packet.type = LOAD;
-    data_packet.asid[0] = lq_it->asid[0];
-    data_packet.asid[1] = lq_it->asid[1];
+    PACKET data_packet = {LOAD, L1D_bus.lower_level->fill_level, lq_it->physical_address, lq_it->virtual_address, lq_it->instr_id, lq_it->ip, lq_it->asid[0], lq_it->asid[1], cpu};
     data_packet.to_return = {&L1D_bus};
     data_packet.lq_index_depend_on_me = {lq_it};
 
@@ -1017,21 +963,11 @@ void O3_CPU::retire_rob()
         for (auto &dmem : ROB.front().destination_memory) {
             if (dmem.address) {
 
-                PACKET data_packet;
                 auto sq_it = dmem.q_it;
 
                 // sq_index and rob_index are no longer available after retirement
                 // but we pass this information to avoid segmentation fault
-                data_packet.fill_level = FILL_L1;
-                data_packet.cpu = cpu;
-                data_packet.address = sq_it->physical_address >> LOG2_BLOCK_SIZE;
-                data_packet.v_address = sq_it->virtual_address >> LOG2_BLOCK_SIZE;
-                data_packet.instr_id = sq_it->instr_id;
-                data_packet.ip = sq_it->ip;
-                data_packet.type = RFO;
-                data_packet.asid[0] = sq_it->asid[0];
-                data_packet.asid[1] = sq_it->asid[1];
-
+                PACKET data_packet = {RFO, FILL_L1, sq_it->physical_address >> LOG2_BLOCK_SIZE, sq_it->virtual_address >> LOG2_BLOCK_SIZE, sq_it->instr_id, sq_it->ip, sq_it->asid[0], sq_it->asid[1], cpu};
                 auto result = L1D_bus.lower_level->add_wq(&data_packet);
                 if (result != -2)
                 {

@@ -12,37 +12,30 @@ class LSQ_ENTRY;
 
 // message packet
 class PACKET {
-  public:
-    bool scheduled = false;
+    public:
+        int type = 0;
+        unsigned int fill_level = 0;
+        uint64_t address = 0,
+                 v_address = 0,
+                 instr_id = 0,
+                 ip = 0;
+        uint8_t asid[2] = {std::numeric_limits<uint8_t>::max(), std::numeric_limits<uint8_t>::max()};
 
-    uint8_t asid[2] = {std::numeric_limits<uint8_t>::max(), std::numeric_limits<uint8_t>::max()},
-            type = 0,
-            fill_level = 0,
-            pf_origin_level = 0;
+        uint32_t cpu = NUM_CPUS;
 
-    int delta = 0,
-        depth = 0,
-        signature = 0,
-        confidence = 0;
+        uint64_t data = 0,
+                 cycle_enqueued = 0;
+        uint64_t event_cycle = std::numeric_limits<uint64_t>::max();
 
-    uint32_t pf_metadata;
+        unsigned int pf_origin_level = 0, translation_level = 0, init_translation_level = 0;
+        uint32_t pf_metadata;
 
-    uint32_t cpu = NUM_CPUS;
+        bool scheduled = false;
 
-    uint64_t address = 0,
-             v_address = 0,
-             data = 0,
-             instr_id = 0,
-             ip = 0,
-             event_cycle = std::numeric_limits<uint64_t>::max(),
-             cycle_enqueued = 0;
-
-    std::list<std::vector<LSQ_ENTRY>::iterator> lq_index_depend_on_me = {};
-    std::list<std::vector<LSQ_ENTRY>::iterator> sq_index_depend_on_me = {};
-    std::list<champsim::circular_buffer<ooo_model_instr>::iterator> instr_depend_on_me;
-    std::list<MemoryRequestProducer*> to_return;
-
-	uint8_t translation_level = 0, init_translation_level = 0; 
+        std::list<std::vector<LSQ_ENTRY>::iterator> lq_index_depend_on_me = {};
+        std::list<std::vector<LSQ_ENTRY>::iterator> sq_index_depend_on_me = {};
+        std::list<champsim::circular_buffer<ooo_model_instr>::iterator> instr_depend_on_me;
+        std::list<MemoryRequestProducer*> to_return;
 };
 
 template <>
