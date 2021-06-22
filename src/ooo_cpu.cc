@@ -11,7 +11,6 @@ extern uint8_t knob_cloudsuite;
 
 void O3_CPU::operate()
 {
-    operated = true;
     instrs_to_read_this_cycle = std::min((std::size_t)FETCH_WIDTH, IFETCH_BUFFER.size() - IFETCH_BUFFER.occupancy());
 
     retire_rob(); // retire
@@ -155,7 +154,7 @@ void O3_CPU::init_instruction(ooo_model_instr arch_instr)
     if (arch_instr.is_branch) {
 
         DP( if (warmup_complete[cpu]) {
-                cout << "[BRANCH] instr_id: " << instr_unique_id << " ip: " << hex << arch_instr.ip << dec << " taken: " << +arch_instr.branch_taken << endl; });
+                std::cout << "[BRANCH] instr_id: " << instr_unique_id << " ip: " << std::hex << arch_instr.ip << std::dec << " taken: " << +arch_instr.branch_taken << std::endl; });
 
         num_branch++;
 
@@ -258,7 +257,7 @@ void O3_CPU::translate_fetch()
     }
 }
 
-void O3_CPU::do_translate_fetch(champsim::circular_buffer<ooo_model_instr>::iterator begin, champsim::circular_buffer<ooo_model_instr>::iterator end)
+void O3_CPU::do_translate_fetch(ifetch_buffer_t::iterator begin, ifetch_buffer_t::iterator end)
 {
     // begin process of fetching this instruction by sending it to the ITLB
     // add it to the ITLB's read queue
@@ -304,7 +303,7 @@ void O3_CPU::fetch_instruction()
     }
 }
 
-void O3_CPU::do_fetch_instruction(champsim::circular_buffer<ooo_model_instr>::iterator begin, champsim::circular_buffer<ooo_model_instr>::iterator end)
+void O3_CPU::do_fetch_instruction(ifetch_buffer_t::iterator begin, ifetch_buffer_t::iterator end)
 {
     // add it to the L1-I's read queue
     PACKET fetch_packet = {LOAD, L1I_bus.lower_level->fill_level, begin->instruction_pa, begin->ip, begin->instr_id, begin->ip, 0, 0, cpu};
@@ -392,8 +391,7 @@ void O3_CPU::do_dib_update(const ooo_model_instr &instr)
         assert(way != dib_set_end);
 
         // update way
-        way->valid = true;
-        way->address = instr.ip;
+        *way = {true, instr.ip};
     }
 
     std::for_each(dib_set_begin, dib_set_end, lru_updater<dib_entry_t>(way));
@@ -460,12 +458,12 @@ struct instr_reg_will_produce
     }
 };
 
-void O3_CPU::do_scheduling(champsim::circular_buffer<ooo_model_instr>::iterator rob_it)
+void O3_CPU::do_scheduling(rob_t::iterator rob_it)
 {
     // Mark register dependencies
     for (auto src_reg : rob_it->source_registers) {
-        auto prior = std::find_if(std::reverse_iterator{rob_it}, ROB.rend(), instr_reg_will_produce(src_reg));
-        if (prior != ROB.rend() && (prior->registers_instrs_depend_on_me.empty() || prior->registers_instrs_depend_on_me.back() != rob_it))
+        auto prior = std::find_if(std::reverse_iterator{rob_it}, std::rend(ROB), instr_reg_will_produce(src_reg));
+        if (prior != std::rend(ROB) && (prior->registers_instrs_depend_on_me.empty() || prior->registers_instrs_depend_on_me.back() != rob_it))
         {
             prior->registers_instrs_depend_on_me.push_back(rob_it);
             rob_it->num_reg_dependent++;
@@ -495,7 +493,7 @@ void O3_CPU::execute_instruction()
     }
 }
 
-void O3_CPU::do_execution(champsim::circular_buffer<ooo_model_instr>::iterator rob_it)
+void O3_CPU::do_execution(rob_t::iterator rob_it)
 {
     rob_it->executed = INFLIGHT;
 
@@ -543,7 +541,7 @@ struct sq_will_forward
     }
 };
 
-void O3_CPU::do_memory_scheduling(champsim::circular_buffer<ooo_model_instr>::iterator rob_it)
+void O3_CPU::do_memory_scheduling(rob_t::iterator rob_it)
 {
     // load
     for (auto &smem_info : rob_it->source_memory)
@@ -580,8 +578,8 @@ void O3_CPU::do_memory_scheduling(champsim::circular_buffer<ooo_model_instr>::it
             else
             {
                 DP(if(warmup_complete[cpu]) {
-                        cout << "[LQ] " << __func__ << " instr_id: " << rob_it->instr_id;
-                        cout << " cannot be added in the load queue occupancy: " << std::count_if(std::begin(LQ), std::end(LQ), is_valid<LSQ_ENTRY>()) << " cycle: " << current_cycle << endl; });
+                        std::cout << "[LQ] " << __func__ << " instr_id: " << rob_it->instr_id;
+                        std::cout << " cannot be added in the load queue occupancy: " << std::count_if(std::begin(LQ), std::end(LQ), is_valid<LSQ_ENTRY>()) << " cycle: " << current_cycle << std::endl; });
             }
         }
     }
@@ -607,8 +605,8 @@ void O3_CPU::do_memory_scheduling(champsim::circular_buffer<ooo_model_instr>::it
             else
             {
                 DP(if(warmup_complete[cpu]) {
-                cout << "[SQ] " << __func__ << " instr_id: " << rob_it->instr_id;
-                cout << " cannot be added in the store queue occupancy: " << std::count_if(std::begin(SQ), std::end(SQ), is_valid<LSQ_ENTRY>()) << " cycle: " << current_cycle << endl; });
+                        std::cout << "[SQ] " << __func__ << " instr_id: " << rob_it->instr_id;
+                        std::cout << " cannot be added in the store queue occupancy: " << std::count_if(std::begin(SQ), std::end(SQ), is_valid<LSQ_ENTRY>()) << " cycle: " << current_cycle << std::endl; });
             }
         }
     }
@@ -622,8 +620,8 @@ void O3_CPU::do_memory_scheduling(champsim::circular_buffer<ooo_model_instr>::it
             rob_it->executed  = INFLIGHT;
 
         DP (if (warmup_complete[cpu]) {
-        cout << "[ROB] " << __func__ << " instr_id: " << rob_it->instr_id;
-        cout << " scheduled all num_mem_ops: " << rob_it->num_mem_ops << endl; });
+                std::cout << "[ROB] " << __func__ << " instr_id: " << rob_it->instr_id;
+                std::cout << " scheduled all num_mem_ops: " << rob_it->num_mem_ops << std::endl; });
     }
 }
 
@@ -764,7 +762,7 @@ int O3_CPU::execute_load(std::vector<LSQ_ENTRY>::iterator lq_it)
     return rq_index;
 }
 
-void O3_CPU::do_complete_execution(champsim::circular_buffer<ooo_model_instr>::iterator rob_it)
+void O3_CPU::do_complete_execution(rob_t::iterator rob_it)
 {
     rob_it->executed = COMPLETED;
 
@@ -958,7 +956,7 @@ void O3_CPU::retire_rob()
 
         // release ROB entry
         DP ( if (warmup_complete[cpu]) {
-                cout << "[ROB] " << __func__ << " instr_id: " << ROB.front().instr_id << " is retired" << endl; });
+                std::cout << "[ROB] " << __func__ << " instr_id: " << ROB.front().instr_id << " is retired" << std::endl; });
 
         ROB.pop_front();
         num_retired++;

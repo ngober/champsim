@@ -14,8 +14,6 @@
 #include "operable.h"
 #include "ptw.h"
 
-using namespace std;
-
 class CacheBus : public MemoryRequestProducer
 {
     public:
@@ -28,7 +26,6 @@ class CacheBus : public MemoryRequestProducer
 class O3_CPU : public champsim::operable {
   public:
     uint32_t cpu = 0;
-    bool operated = false;
 
     // instruction
     uint64_t instr_unique_id = 0,
@@ -41,8 +38,8 @@ class O3_CPU : public champsim::operable {
     struct dib_entry_t
     {
         bool valid = false;
-        unsigned lru = 999999;
         uint64_t address = 0;
+        unsigned lru = 999999;
     };
 
     // instruction buffer
@@ -51,12 +48,19 @@ class O3_CPU : public champsim::operable {
     dib_t DIB{dib_set*dib_way};
 
     // reorder buffer, load/store queue
-    champsim::circular_buffer<ooo_model_instr> IFETCH_BUFFER;
-    champsim::delay_queue<ooo_model_instr> DISPATCH_BUFFER;
-    champsim::delay_queue<ooo_model_instr> DECODE_BUFFER;
-    champsim::circular_buffer<ooo_model_instr> ROB;
-    std::vector<LSQ_ENTRY> LQ;
-    std::vector<LSQ_ENTRY> SQ;
+    using ifetch_buffer_t = champsim::circular_buffer<ooo_model_instr>;
+    using dispatch_buffer_t = champsim::delay_queue<ooo_model_instr>;
+    using decode_buffer_t = champsim::delay_queue<ooo_model_instr>;
+    using rob_t = champsim::circular_buffer<ooo_model_instr>;
+    using lq_t = std::vector<LSQ_ENTRY>;
+    using sq_t = std::vector<LSQ_ENTRY>;
+
+    ifetch_buffer_t IFETCH_BUFFER;
+    dispatch_buffer_t DISPATCH_BUFFER;
+    decode_buffer_t DECODE_BUFFER;
+    rob_t ROB;
+    lq_t LQ;
+    sq_t SQ;
 
     // Constants
     const unsigned FETCH_WIDTH, DECODE_WIDTH, DISPATCH_WIDTH, SCHEDULER_SIZE, EXEC_WIDTH, LQ_WIDTH, SQ_WIDTH, RETIRE_WIDTH;
@@ -66,13 +70,13 @@ class O3_CPU : public champsim::operable {
     std::deque<uint64_t> STA;
 
     // Ready-To-Execute
-    std::queue<champsim::circular_buffer<ooo_model_instr>::iterator> ready_to_execute;
+    std::queue<rob_t::iterator> ready_to_execute;
 
     // Ready-To-Load
-    std::queue<std::vector<LSQ_ENTRY>::iterator> RTL0, RTL1;
+    std::queue<lq_t::iterator> RTL0, RTL1;
 
     // Ready-To-Store
-    std::queue<std::vector<LSQ_ENTRY>::iterator> RTS0, RTS1;
+    std::queue<sq_t::iterator> RTS0, RTS1;
 
     // branch
     int branch_mispredict_stall_fetch = 0; // flag that says that we should stall because a branch prediction was wrong
@@ -148,23 +152,21 @@ class O3_CPU : public champsim::operable {
          schedule_memory_instruction(),
          execute_memory_instruction(),
          do_check_dib(ooo_model_instr &instr),
-         do_translate_fetch(champsim::circular_buffer<ooo_model_instr>::iterator begin, champsim::circular_buffer<ooo_model_instr>::iterator end),
-         do_fetch_instruction(champsim::circular_buffer<ooo_model_instr>::iterator begin, champsim::circular_buffer<ooo_model_instr>::iterator end),
+         do_translate_fetch(ifetch_buffer_t::iterator begin, ifetch_buffer_t::iterator end),
+         do_fetch_instruction(ifetch_buffer_t::iterator begin, ifetch_buffer_t::iterator end),
          do_dib_update(const ooo_model_instr &instr),
-         do_scheduling(champsim::circular_buffer<ooo_model_instr>::iterator rob_it),
-         do_execution(champsim::circular_buffer<ooo_model_instr>::iterator rob_it),
-         do_memory_scheduling(champsim::circular_buffer<ooo_model_instr>::iterator rob_it),
+         do_scheduling(rob_t::iterator rob_it),
+         do_execution(rob_t::iterator rob_it),
+         do_memory_scheduling(rob_t::iterator rob_it),
          operate_lsq(),
-         do_complete_execution(champsim::circular_buffer<ooo_model_instr>::iterator rob_it),
+         do_complete_execution(rob_t::iterator rob_it),
          do_sq_forward_to_lq(LSQ_ENTRY &sq_entry, LSQ_ENTRY &lq_entry);
 
     void initialize_core();
-    void execute_store(std::vector<LSQ_ENTRY>::iterator sq_it);
-    int  execute_load(std::vector<LSQ_ENTRY>::iterator lq_it);
-    int  do_translate_store(std::vector<LSQ_ENTRY>::iterator sq_it);
-    int  do_translate_load(std::vector<LSQ_ENTRY>::iterator sq_it);
-    void check_dependency(int prior, int current);
-    void operate_cache();
+    void execute_store(sq_t::iterator sq_it);
+    int  execute_load(lq_t::iterator lq_it);
+    int  do_translate_store(sq_t::iterator sq_it);
+    int  do_translate_load(lq_t::iterator lq_it);
     void complete_inflight_instruction();
     void handle_memory_return();
     void retire_rob();
