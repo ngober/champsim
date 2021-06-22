@@ -599,15 +599,22 @@ void O3_CPU::do_memory_scheduling(champsim::circular_buffer<ooo_model_instr>::it
     }
 
     // store
-    for (uint32_t i=0; i<std::size(rob_it->destination_memory); i++)
+    for (auto &smem_info : rob_it->destination_memory)
     {
-        if (!rob_it->destination_memory[i].added)
+        if (!smem_info.added)
         {
-            auto sq_it = std::find_if_not(std::begin(SQ), std::end(SQ), is_valid<LSQ_ENTRY>());
-            if (sq_it != std::end(SQ))
+            if (auto sq_it = std::find_if_not(std::begin(SQ), std::end(SQ), is_valid<LSQ_ENTRY>()); sq_it != std::end(SQ))
             {
                 if (STA.front() == rob_it->instr_id)
-                    add_store_queue(rob_it, i);
+                {
+                    // add it to the store queue
+                    *sq_it = {rob_it->instr_id, smem_info.address, rob_it->ip, rob_it->asid[0], rob_it->asid[1], rob_it, current_cycle+SCHEDULING_LATENCY};
+                    smem_info.q_it = sq_it;
+                    smem_info.added = true;
+
+                    STA.pop_front();
+                    RTS0.push(sq_it);
+                }
             }
             else
             {
@@ -630,26 +637,6 @@ void O3_CPU::do_memory_scheduling(champsim::circular_buffer<ooo_model_instr>::it
         cout << "[ROB] " << __func__ << " instr_id: " << rob_it->instr_id;
         cout << " scheduled all num_mem_ops: " << rob_it->num_mem_ops << endl; });
     }
-}
-
-void O3_CPU::add_store_queue(champsim::circular_buffer<ooo_model_instr>::iterator rob_it, uint32_t data_index)
-{
-    auto sq_it = std::find_if_not(std::begin(SQ), std::end(SQ), is_valid<LSQ_ENTRY>());
-    assert(sq_it->virtual_address == 0);
-
-    // add it to the store queue
-    *sq_it = {rob_it->instr_id, rob_it->destination_memory[data_index].address, rob_it->ip, rob_it->asid[0], rob_it->asid[1], rob_it, current_cycle+SCHEDULING_LATENCY};
-    rob_it->destination_memory[data_index].q_it = sq_it;
-    rob_it->destination_memory[data_index].added = true;
-
-    STA.pop_front();
-
-    RTS0.push(sq_it);
-
-    DP(if(warmup_complete[cpu]) {
-            std::cout << "[SQ] " << __func__ << " instr_id: " << sq_it->instr_id;
-            std::cout << " is added in the SQ translated: " << +sq_it->translated << " fetched: " << +sq_it->fetched;
-            std::cout << " cycle: " << current_cycle << std::endl; });
 }
 
 void O3_CPU::operate_lsq()
