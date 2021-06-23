@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <array>
 #include <bitset>
+#include <chrono>
 #include <getopt.h>
 #include <fstream>
 #include <functional>
@@ -23,13 +24,15 @@ uint8_t warmup_complete[NUM_CPUS] = {},
         all_simulation_complete = 0,
         MAX_INSTR_DESTINATIONS = NUM_INSTR_DESTINATIONS,
         knob_cloudsuite = 0,
-        knob_low_bandwidth = 0;
+        knob_low_bandwidth = 0,
+        knob_heartbeat = 1;
+
 
 uint64_t warmup_instructions     = 1000000,
          simulation_instructions = 10000000,
          champsim_seed;
 
-time_t start_time;
+const auto start_time = std::chrono::steady_clock::now();
 
 extern MEMORY_CONTROLLER DRAM;
 extern VirtualMemory vmem;
@@ -253,13 +256,20 @@ void print_dram_stats()
         cout << " AVG_CONGESTED_CYCLE: -" << endl;
 }
 
+std::tuple<uint64_t, uint64_t, uint64_t> elapsed_time()
+{
+    auto duration = std::chrono::steady_clock::now() - start_time;
+
+    auto hours = std::chrono::floor<std::chrono::hours>(duration);
+    auto minutes = std::chrono::floor<std::chrono::minutes>(duration) - hours;
+    auto seconds = std::chrono::floor<std::chrono::seconds>(duration) - hours - minutes;
+
+    return { hours.count(), minutes.count(), seconds.count() };
+}
+
 void finish_warmup()
 {
-    uint64_t elapsed_second = (uint64_t)(time(NULL) - start_time),
-             elapsed_minute = elapsed_second / 60,
-             elapsed_hour = elapsed_minute / 60;
-    elapsed_minute -= elapsed_hour*60;
-    elapsed_second -= (elapsed_hour*3600 + elapsed_minute*60);
+    auto [elapsed_hour, elapsed_minute, elapsed_second] = elapsed_time();
 
     // reset core latency
     // note: since re-ordering he function calls in the main simulation loop, it's no longer necessary to add
@@ -357,8 +367,6 @@ int main(int argc, char** argv)
     cout << endl << "*** ChampSim Multicore Out-of-Order Simulator ***" << endl << endl;
 
     // initialize knobs
-    uint8_t show_heartbeat = 1;
-
     uint32_t seed_number = 0;
 
     // check to see if knobs changed using getopt_long()
@@ -392,7 +400,7 @@ int main(int argc, char** argv)
                 simulation_instructions = atol(optarg);
                 break;
             case 'h':
-                show_heartbeat = 0;
+                knob_heartbeat = 0;
                 break;
             case 'c':
                 knob_cloudsuite = 1;
@@ -488,14 +496,7 @@ int main(int argc, char** argv)
     }
 
     // simulation entry point
-    start_time = time(NULL);
     while (std::any_of(std::begin(simulation_complete), std::end(simulation_complete), std::logical_not<uint8_t>())) {
-
-        uint64_t elapsed_second = (uint64_t)(time(NULL) - start_time),
-                 elapsed_minute = elapsed_second / 60,
-                 elapsed_hour = elapsed_minute / 60;
-        elapsed_minute -= elapsed_hour*60;
-        elapsed_second -= (elapsed_hour*3600 + elapsed_minute*60);
 
         for (auto op : operables)
         {
@@ -512,7 +513,9 @@ int main(int argc, char** argv)
             }
 
             // heartbeat information
-            if (show_heartbeat && (ooo_cpu[i]->num_retired >= ooo_cpu[i]->next_print_instruction)) {
+            if (knob_heartbeat && (ooo_cpu[i]->num_retired >= ooo_cpu[i]->next_print_instruction)) {
+
+                auto [elapsed_hour, elapsed_minute, elapsed_second] = elapsed_time();
                 float cumulative_ipc;
                 if (warmup_complete[i])
                     cumulative_ipc = (1.0*(ooo_cpu[i]->num_retired - ooo_cpu[i]->begin_sim_instr)) / (ooo_cpu[i]->current_cycle - ooo_cpu[i]->begin_sim_cycle);
@@ -542,6 +545,7 @@ int main(int argc, char** argv)
 
             // simulation complete
             if ((all_warmup_complete > NUM_CPUS) && (simulation_complete[i] == 0) && (ooo_cpu[i]->num_retired >= (ooo_cpu[i]->begin_sim_instr + simulation_instructions))) {
+                auto [elapsed_hour, elapsed_minute, elapsed_second] = elapsed_time();
                 simulation_complete[i] = 1;
                 ooo_cpu[i]->finish_sim_instr = ooo_cpu[i]->num_retired - ooo_cpu[i]->begin_sim_instr;
                 ooo_cpu[i]->finish_sim_cycle = ooo_cpu[i]->current_cycle - ooo_cpu[i]->begin_sim_cycle;
@@ -556,12 +560,6 @@ int main(int argc, char** argv)
         }
     }
 
-    uint64_t elapsed_second = (uint64_t)(time(NULL) - start_time),
-             elapsed_minute = elapsed_second / 60,
-             elapsed_hour = elapsed_minute / 60;
-    elapsed_minute -= elapsed_hour*60;
-    elapsed_second -= (elapsed_hour*3600 + elapsed_minute*60);
-    
     std::cout << std::endl;
     std::cout << "ChampSim completed all CPUs" << std::endl << std::endl;;
 
