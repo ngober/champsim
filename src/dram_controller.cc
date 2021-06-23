@@ -1,11 +1,12 @@
 #include "dram_controller.h"
 
 #include <algorithm>
+#include <bitset>
 
 #include "champsim_constants.h"
 #include "util.h"
 
-extern uint8_t all_warmup_complete;
+extern std::bitset<NUM_CPUS> warmup_complete;
 
 struct is_unscheduled
 {
@@ -143,7 +144,7 @@ void MEMORY_CONTROLLER::schedule(std::vector<PACKET>::iterator q_it)
 
 int MEMORY_CONTROLLER::add_rq(PACKET *packet)
 {
-    if (all_warmup_complete < NUM_CPUS)
+    if (!warmup_complete.all())
     {
         for (auto ret : packet->to_return)
             ret->return_data(packet);
@@ -191,7 +192,7 @@ int MEMORY_CONTROLLER::add_rq(PACKET *packet)
 
 int MEMORY_CONTROLLER::add_wq(PACKET *packet)
 {
-    if (all_warmup_complete < NUM_CPUS)
+    if (!warmup_complete.all())
         return -1; // Fast-forward
 
     auto &channel = channels[dram_get_channel(packet->address)];

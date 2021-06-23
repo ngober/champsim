@@ -1,6 +1,7 @@
 #include "cache.h"
 
 #include <algorithm>
+#include <bitset>
 #include <iterator>
 
 #include "champsim.h"
@@ -14,7 +15,7 @@
 #endif
 
 extern VirtualMemory vmem;
-extern uint8_t  warmup_complete[NUM_CPUS];
+extern std::bitset<NUM_CPUS> warmup_complete;
 extern std::array<O3_CPU*, NUM_CPUS> ooo_cpu;
 
 void CACHE::handle_fill()

@@ -29,11 +29,10 @@ class O3_CPU : public champsim::operable {
 
     // instruction
     uint64_t instr_unique_id = 0,
-             begin_sim_cycle = 0, begin_sim_instr = 0,
-             last_sim_cycle = 0, last_sim_instr = 0,
-             finish_sim_cycle = 0, finish_sim_instr = 0,
-             instrs_to_read_this_cycle = 0, instrs_to_fetch_this_cycle = 0,
-             next_print_instruction = STAT_PRINTING_PERIOD, num_retired = 0;
+             begin_phase_cycle = 0, begin_phase_instr = 0,
+             finish_phase_cycle = 0, finish_phase_instr = 0,
+             last_heartbeat_cycle = 0, last_heartbeat_instr = 0,
+             instrs_to_read_this_cycle = 0, num_retired = 0;
 
     struct dib_entry_t
     {

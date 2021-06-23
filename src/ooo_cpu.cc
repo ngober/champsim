@@ -1,17 +1,24 @@
+#include "ooo_cpu.h"
+
 #include <algorithm>
+#include <bitset>
 #include <vector>
 
-#include "ooo_cpu.h"
+#include "champsim.h"
+#include "champsim_constants.h"
 #include "instruction.h"
 
 #define DEADLOCK_CYCLE 1000000
 
-extern uint8_t warmup_complete[NUM_CPUS];
+extern std::bitset<NUM_CPUS> warmup_complete;
 extern uint8_t knob_cloudsuite;
+extern uint8_t knob_heartbeat;
 
 void O3_CPU::operate()
 {
     instrs_to_read_this_cycle = std::min((std::size_t)FETCH_WIDTH, IFETCH_BUFFER.size() - IFETCH_BUFFER.occupancy());
+    if (fetch_stall)
+        instrs_to_read_this_cycle = 0;
 
     retire_rob(); // retire
     complete_inflight_instruction(); // finalize execution
@@ -30,6 +37,23 @@ void O3_CPU::operate()
     // check for deadlock
     if (ROB.front().ip && (ROB.front().event_cycle + DEADLOCK_CYCLE) <= current_cycle)
         print_deadlock(cpu);
+
+    // heartbeat information
+    if (num_retired >= last_heartbeat_instr + STAT_PRINTING_PERIOD)
+    {
+        if (knob_heartbeat)
+        {
+            auto [elapsed_hour, elapsed_minute, elapsed_second] = elapsed_time();
+
+            std::cout << "Heartbeat CPU " << cpu << " instructions: " << num_retired << " cycles: " << current_cycle;
+            std::cout << " heartbeat IPC: "  << 1.0 * (num_retired - last_heartbeat_instr) / (current_cycle - last_heartbeat_cycle);
+            std::cout << " cumulative IPC: " << 1.0 * (num_retired - begin_phase_instr)    / (current_cycle - begin_phase_cycle);
+            std::cout << " (Simulation time: " << elapsed_hour << " hr " << elapsed_minute << " min " << elapsed_second << " sec) " << std::endl;
+        }
+
+        last_heartbeat_instr = num_retired;
+        last_heartbeat_cycle = current_cycle;
+    }
 }
 
 void O3_CPU::initialize_core()

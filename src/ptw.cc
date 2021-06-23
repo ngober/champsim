@@ -1,10 +1,13 @@
-#include "ooo_cpu.h"
 #include "ptw.h"
+
+#include <bitset>
+
+#include "ooo_cpu.h"
 #include "vmem.h"
 #include "util.h"
 
 extern VirtualMemory vmem;
-extern uint8_t  warmup_complete[NUM_CPUS];
+extern std::bitset<NUM_CPUS> warmup_complete;
 extern uint8_t knob_cloudsuite;
 
 void PageTableWalker::handle_read()

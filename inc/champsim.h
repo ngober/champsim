@@ -30,8 +30,6 @@
 #define FILL_DRAM 16
 
 using namespace std;
-
-extern uint8_t warmup_complete[NUM_CPUS];
 std::tuple<uint64_t, uint64_t, uint64_t> elapsed_time();
 void print_deadlock(uint32_t i);
 #endif
