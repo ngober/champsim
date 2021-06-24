@@ -18,7 +18,16 @@ void O3_CPU::operate()
 {
     instrs_to_read_this_cycle = std::min((std::size_t)FETCH_WIDTH, IFETCH_BUFFER.size() - IFETCH_BUFFER.occupancy());
     if (fetch_stall)
+    {
         instrs_to_read_this_cycle = 0;
+
+        // Turn off stalling if we have passed the resume cycle
+        if (current_cycle >= fetch_resume_cycle && fetch_resume_cycle != 0)
+        {
+            fetch_stall = false;
+            fetch_resume_cycle = 0;
+        }
+    }
 
     retire_rob(); // retire
     complete_inflight_instruction(); // finalize execution
@@ -65,6 +74,12 @@ void O3_CPU::reset_stats()
 
     std::fill(std::begin(total_branch_types), std::end(total_branch_types), 0);
     std::fill(std::begin(branch_type_misses), std::end(branch_type_misses), 0);
+}
+
+void O3_CPU::stall(uint64_t for_cycles = 0)
+{
+    fetch_stall = true;
+    fetch_resume_cycle = current_cycle + for_cycles;
 }
 
 void O3_CPU::initialize_core()
@@ -210,7 +225,7 @@ void O3_CPU::init_instruction(ooo_model_instr arch_instr)
 	    branch_type_misses[arch_instr.branch_type]++;
             if(warmup_complete[cpu])
             {
-                fetch_stall = 1;
+                fetch_stall = true;
                 instrs_to_read_this_cycle = 0;
                 arch_instr.branch_mispredicted = 1;
             }
@@ -315,13 +330,6 @@ void O3_CPU::do_translate_fetch(ifetch_buffer_t::iterator begin, ifetch_buffer_t
 
 void O3_CPU::fetch_instruction()
 {
-  // if we had a branch mispredict, turn fetching back on after the branch mispredict penalty
-  if((fetch_stall == 1) && (current_cycle >= fetch_resume_cycle) && (fetch_resume_cycle != 0))
-    {
-      fetch_stall = 0;
-      fetch_resume_cycle = 0;
-    }
-
   if (IFETCH_BUFFER.empty())
       return;
 
@@ -395,7 +403,7 @@ void O3_CPU::decode_instruction()
 		// clear the branch_mispredicted bit so we don't attempt to resume fetch again at execute
 		db_entry.branch_mispredicted = 0;
 		// pay misprediction penalty
-		fetch_resume_cycle = current_cycle + BRANCH_MISPREDICT_PENALTY;
+        stall(BRANCH_MISPREDICT_PENALTY);
 	      }
 	  }
 	
@@ -815,8 +823,9 @@ void O3_CPU::do_complete_execution(rob_t::iterator rob_it)
         }
     }
 
+    // If we mispredicted (and have not already paid the penalty), pay the penalty now
     if (rob_it->branch_mispredicted)
-        fetch_resume_cycle = current_cycle + BRANCH_MISPREDICT_PENALTY;
+        stall(BRANCH_MISPREDICT_PENALTY);
 }
 
 void O3_CPU::complete_inflight_instruction()

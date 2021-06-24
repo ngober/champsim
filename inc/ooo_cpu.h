@@ -80,7 +80,7 @@ class O3_CPU : public champsim::operable {
     // branch
     int branch_mispredict_stall_fetch = 0; // flag that says that we should stall because a branch prediction was wrong
     int mispredicted_branch_iw_index = 0; // index in the instruction window of the mispredicted branch.  fetch resumes after the instruction at this index executes
-    uint8_t  fetch_stall = 0;
+    bool fetch_stall = false;
     uint64_t fetch_resume_cycle = 0;
     uint64_t num_branch = 0, branch_mispredictions = 0;
     uint64_t total_rob_occupancy_at_branch_mispredict;
@@ -136,42 +136,45 @@ class O3_CPU : public champsim::operable {
         ptw->cpu = this->cpu;
     }
 
-    void operate();
-
-    // functions
-    void init_instruction(ooo_model_instr instr);
-    void check_dib(),
-         translate_fetch(),
-         fetch_instruction(),
-         promote_to_decode(),
-         decode_instruction(),
-         dispatch_instruction(),
-         schedule_instruction(),
-         execute_instruction(),
-         schedule_memory_instruction(),
-         execute_memory_instruction(),
-         do_check_dib(ooo_model_instr &instr),
-         do_translate_fetch(ifetch_buffer_t::iterator begin, ifetch_buffer_t::iterator end),
-         do_fetch_instruction(ifetch_buffer_t::iterator begin, ifetch_buffer_t::iterator end),
-         do_dib_update(const ooo_model_instr &instr),
-         do_scheduling(rob_t::iterator rob_it),
-         do_execution(rob_t::iterator rob_it),
-         do_memory_scheduling(rob_t::iterator rob_it),
-         operate_lsq(),
-         do_complete_execution(rob_t::iterator rob_it),
-         do_sq_forward_to_lq(LSQ_ENTRY &sq_entry, LSQ_ENTRY &lq_entry);
-
     void initialize_core();
-    void execute_store(sq_t::iterator sq_it);
-    int  execute_load(lq_t::iterator lq_it);
-    int  do_translate_store(sq_t::iterator sq_it);
-    int  do_translate_load(lq_t::iterator lq_it);
+    void init_instruction(ooo_model_instr instr);
+    void operate();
+    void reset_stats();
+    void stall(uint64_t for_cycles);
+
+  private:
+    // core operation functions
+    void check_dib();
+    void translate_fetch();
+    void fetch_instruction();
+    void promote_to_decode();
+    void decode_instruction();
+    void dispatch_instruction();
+    void schedule_instruction();
+    void execute_instruction();
+    void schedule_memory_instruction();
+    void execute_memory_instruction();
+    void operate_lsq();
     void complete_inflight_instruction();
     void handle_memory_return();
     void retire_rob();
 
-    void reset_stats();
+    // operate on just one item
+    void do_check_dib(ooo_model_instr &instr);
+    void do_translate_fetch(ifetch_buffer_t::iterator begin, ifetch_buffer_t::iterator end);
+    void do_fetch_instruction(ifetch_buffer_t::iterator begin, ifetch_buffer_t::iterator end);
+    void do_dib_update(const ooo_model_instr &instr);
+    void do_scheduling(rob_t::iterator rob_it);
+    void do_execution(rob_t::iterator rob_it);
+    void do_memory_scheduling(rob_t::iterator rob_it);
+    void do_sq_forward_to_lq(LSQ_ENTRY &sq_entry, LSQ_ENTRY &lq_entry);
+    int  do_translate_store(sq_t::iterator sq_it);
+    void execute_store(sq_t::iterator sq_it);
+    int  do_translate_load(lq_t::iterator lq_it);
+    int  execute_load(lq_t::iterator lq_it);
+    void do_complete_execution(rob_t::iterator rob_it);
 
+  public:
     // branch predictor
     const std::function<void()> impl_branch_predictor_initialize;
     const std::function<void(uint64_t, uint64_t, uint8_t, uint8_t)> impl_last_branch_result;
@@ -190,8 +193,10 @@ class O3_CPU : public champsim::operable {
     const std::function<void()> impl_prefetcher_cycle_operate;
     const std::function<void()> impl_prefetcher_final_stats;
 
+  private:
     int prefetch_code_line(uint64_t pf_v_addr);
 
+  public:
 #include "ooo_cpu_modules.inc"
 
 };
