@@ -17,17 +17,12 @@ extern uint8_t knob_heartbeat;
 void O3_CPU::operate()
 {
     instrs_to_read_this_cycle = std::min((std::size_t)FETCH_WIDTH, IFETCH_BUFFER.size() - IFETCH_BUFFER.occupancy());
-    if (fetch_stall)
-    {
-        instrs_to_read_this_cycle = 0;
 
-        // Turn off stalling if we have passed the resume cycle
-        if (current_cycle >= fetch_resume_cycle && fetch_resume_cycle != 0)
-        {
-            fetch_stall = false;
-            fetch_resume_cycle = 0;
-        }
-    }
+    // Turn off stalling if we have passed the resume cycle
+    if (current_cycle > fetch_resume_cycle)
+        resume();
+    else
+        instrs_to_read_this_cycle = 0;
 
     retire_rob(); // retire
     complete_inflight_instruction(); // finalize execution
@@ -78,8 +73,15 @@ void O3_CPU::reset_stats()
 
 void O3_CPU::stall(uint64_t for_cycles = 0)
 {
-    fetch_stall = true;
-    fetch_resume_cycle = current_cycle + for_cycles;
+    if (for_cycles == 0)
+        fetch_resume_cycle = std::numeric_limits<uint64_t>::max(); // indefinite
+    else
+        fetch_resume_cycle = current_cycle + for_cycles;
+}
+
+void O3_CPU::resume()
+{
+    fetch_resume_cycle = 0;
 }
 
 void O3_CPU::initialize_core()
@@ -225,7 +227,7 @@ void O3_CPU::init_instruction(ooo_model_instr arch_instr)
 	    branch_type_misses[arch_instr.branch_type]++;
             if(warmup_complete[cpu])
             {
-                fetch_stall = true;
+                fetch_resume_cycle = std::numeric_limits<uint64_t>::max();
                 instrs_to_read_this_cycle = 0;
                 arch_instr.branch_mispredicted = 1;
             }

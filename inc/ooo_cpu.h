@@ -136,11 +136,13 @@ class O3_CPU : public champsim::operable {
         ptw->cpu = this->cpu;
     }
 
+    // External interface
     void initialize_core();
     void init_instruction(ooo_model_instr instr);
     void operate();
     void reset_stats();
     void stall(uint64_t for_cycles);
+    void resume();
 
   private:
     // core operation functions
