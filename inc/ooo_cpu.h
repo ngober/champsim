@@ -34,6 +34,8 @@ class O3_CPU : public champsim::operable {
              last_heartbeat_cycle = 0, last_heartbeat_instr = 0,
              instrs_to_read_this_cycle = 0, num_retired = 0;
 
+    bool phase_complete = false;
+
     struct dib_entry_t
     {
         bool valid = false;

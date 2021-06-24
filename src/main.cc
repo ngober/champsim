@@ -434,22 +434,20 @@ int main(int argc, char** argv)
     champsim_seed = seed_number;
 
     // SHARED CACHE
-    for (O3_CPU* cpu : ooo_cpu)
+    for (auto cpu : ooo_cpu)
     {
         cpu->initialize_core();
     }
 
-    for (auto it = caches.rbegin(); it != caches.rend(); ++it)
+    for (auto cache : caches)
     {
-        (*it)->impl_prefetcher_initialize();
-        (*it)->impl_replacement_initialize();
+        cache->impl_prefetcher_initialize();
+        cache->impl_replacement_initialize();
     }
 
     // simulation entry point
     for (auto phase_duration : {warmup_instructions, simulation_instructions})
     {
-        std::bitset<NUM_CPUS> phase_complete = {};
-
         /////
         // PRE-PHASE
         /////
@@ -461,6 +459,7 @@ int main(int argc, char** argv)
         // mark cycle begin
         for (auto cpu : ooo_cpu)
         {
+            cpu->phase_complete    = false;
             cpu->begin_phase_instr = cpu->num_retired;
             cpu->begin_phase_cycle = cpu->current_cycle;
         }
@@ -468,7 +467,7 @@ int main(int argc, char** argv)
         /////
         // PHASE
         /////
-        while (!phase_complete.all())
+        while (std::count_if(std::begin(ooo_cpu), std::end(ooo_cpu), [](O3_CPU *x){ return x->phase_complete; }) < NUM_CPUS)
         {
             // Operate all elements
             for (auto op : operables)
@@ -489,13 +488,13 @@ int main(int argc, char** argv)
             // check for phase complete
             for (auto cpu : ooo_cpu)
             {
-                if (!phase_complete[cpu->cpu] && (cpu->num_retired >= (cpu->begin_phase_instr + phase_duration)))
+                if (!cpu->phase_complete && (cpu->num_retired >= (cpu->begin_phase_instr + phase_duration)))
                 {
-                    auto [elapsed_hour, elapsed_minute, elapsed_second] = elapsed_time();
-                    phase_complete[cpu->cpu] = true;
+                    cpu->phase_complete = true;
                     cpu->finish_phase_instr = cpu->num_retired;
                     cpu->finish_phase_cycle = cpu->current_cycle;
 
+                    auto [elapsed_hour, elapsed_minute, elapsed_second] = elapsed_time();
                     std::cout << "Phase finished CPU " << cpu->cpu << " instructions: " << cpu->num_retired << " cycles: " << cpu->current_cycle;
                     std::cout << " cumulative IPC: " << 1.0 * (cpu->finish_phase_instr - cpu->begin_phase_instr) / (cpu->finish_phase_cycle - cpu->begin_phase_cycle);
                     std::cout << " (Simulation time: " << elapsed_hour << " hr " << elapsed_minute << " min " << elapsed_second << " sec) " << std::endl;
