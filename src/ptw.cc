@@ -204,6 +204,10 @@ void PageTableWalker::operate()
     RQ.operate();
 }
 
+void PageTableWalker::reset_stats()
+{
+}
+
 void PageTableWalker::handle_page_fault(PageTablePage* page, PACKET *packet, uint8_t pt_level)
 {
 	assert(pt_level <= 5);

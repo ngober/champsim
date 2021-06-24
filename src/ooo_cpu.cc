@@ -56,6 +56,17 @@ void O3_CPU::operate()
     }
 }
 
+void O3_CPU::reset_stats()
+{
+    // reset branch stats
+    num_branch = 0;
+    branch_mispredictions = 0;
+    total_rob_occupancy_at_branch_mispredict = 0;
+
+    std::fill(std::begin(total_branch_types), std::end(total_branch_types), 0);
+    std::fill(std::begin(branch_type_misses), std::end(branch_type_misses), 0);
+}
+
 void O3_CPU::initialize_core()
 {
     // BRANCH PREDICTOR & BTB

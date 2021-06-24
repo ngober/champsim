@@ -115,6 +115,17 @@ void MEMORY_CONTROLLER::operate()
     }
 }
 
+void MEMORY_CONTROLLER::reset_stats()
+{
+    for (auto &channel : channels)
+    {
+        channel.WQ_ROW_BUFFER_HIT = 0;
+        channel.WQ_ROW_BUFFER_MISS = 0;
+        channel.RQ_ROW_BUFFER_HIT = 0;
+        channel.RQ_ROW_BUFFER_MISS = 0;
+    }
+}
+
 void MEMORY_CONTROLLER::schedule(std::vector<PACKET>::iterator q_it)
 {
     uint32_t op_channel = dram_get_channel(q_it->address),

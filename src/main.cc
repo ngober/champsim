@@ -455,29 +455,14 @@ int main(int argc, char** argv)
         /////
 
         // reset stats
+        for (auto op : operables)
+            op->reset_stats();
+
+        // mark cycle begin
         for (auto cpu : ooo_cpu)
         {
             cpu->begin_phase_instr = cpu->num_retired;
             cpu->begin_phase_cycle = cpu->current_cycle;
-
-            // reset branch stats
-            cpu->num_branch = 0;
-            cpu->branch_mispredictions = 0;
-            cpu->total_rob_occupancy_at_branch_mispredict = 0;
-
-            std::fill(std::begin(cpu->total_branch_types), std::end(cpu->total_branch_types), 0);
-            std::fill(std::begin(cpu->branch_type_misses), std::end(cpu->branch_type_misses), 0);
-        }
-
-        for (auto cache : caches)
-            cache->reset_stats();
-
-        for (auto &channel : DRAM.channels)
-        {
-            channel.WQ_ROW_BUFFER_HIT = 0;
-            channel.WQ_ROW_BUFFER_MISS = 0;
-            channel.RQ_ROW_BUFFER_HIT = 0;
-            channel.RQ_ROW_BUFFER_MISS = 0;
         }
 
         /////
@@ -499,7 +484,7 @@ int main(int argc, char** argv)
 
             // check for warmup complete
             for (auto cpu : ooo_cpu)
-                warmup_complete[cpu->cpu] = (cpu->num_retired > warmup_instructions);
+                warmup_complete.set(cpu->cpu, (cpu->num_retired > warmup_instructions));
 
             // check for phase complete
             for (auto cpu : ooo_cpu)

@@ -133,6 +133,8 @@ class PageTableWalker : public champsim::operable, public MemoryRequestConsumer,
          increment_WQ_FULL(uint64_t address),
          add_mshr(PACKET *packet);
 
+    void reset_stats();
+
 	void handle_read(),
 		 handle_fill();
 

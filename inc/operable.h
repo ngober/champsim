@@ -30,6 +30,7 @@ class operable {
     }
 
     virtual void operate() = 0;
+    virtual void reset_stats() = 0;
 };
 
 class by_next_operate

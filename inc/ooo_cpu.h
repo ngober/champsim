@@ -170,6 +170,8 @@ class O3_CPU : public champsim::operable {
     void handle_memory_return();
     void retire_rob();
 
+    void reset_stats();
+
     // branch predictor
     const std::function<void()> impl_branch_predictor_initialize;
     const std::function<void(uint64_t, uint64_t, uint8_t, uint8_t)> impl_last_branch_result;
